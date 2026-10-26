@@ -1,3 +1,4 @@
+import type { AccountBook, DayBalance } from './accounts'
 export const MONTHS = [
   'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
   'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
@@ -37,8 +38,10 @@ export interface TradeOp {
   answers: Answer[]
   result: Result | null
   learned: string
+  analysis?: string
   risk?: number
   reward?: number
+  accounts?: string[]
 }
 
 export interface SessionRecord {
@@ -49,6 +52,8 @@ export interface SessionRecord {
   note: string
   answers: Answer[]
   operations?: TradeOp[]
+  balances?: DayBalance[]
+  book?: AccountBook
   disciplined: boolean
 }
 
@@ -293,6 +298,7 @@ export function dayMark(session: SessionRecord): { net: number; letter: 'c' | 'n
   if (session.status !== 'completed') return null
   const fromOps = (session.operations ?? []).filter((op) => op.result !== null)
   const stakes: Array<{ result: Result | null; risk?: number; reward?: number }> = fromOps.length > 0 ? fromOps : session.result ? [{ result: session.result }] : []
+  if (stakes.length === 0) return null
   let net = 0
   for (const stake of stakes) {
     const result = stake.result

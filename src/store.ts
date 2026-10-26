@@ -4,6 +4,7 @@ export interface PetStore {
   loadRules: () => Promise<RuleDef[]>
   loadSessions: () => Promise<SessionRecord[]>
   saveSession: (session: SessionRecord) => Promise<void>
+  deleteSession: (date: string) => Promise<void>
   addRule: (text: string, position: number) => Promise<void>
   renameRule: (id: string, text: string) => Promise<void>
   removeRule: (id: string) => Promise<void>
@@ -58,6 +59,11 @@ export function localStore(): PetStore {
       const data = read()
       const rest = data.sessions.filter((item) => item.date !== session.date)
       data.sessions = [...rest, session].sort((a, b) => a.date.localeCompare(b.date))
+      write(data)
+    },
+    async deleteSession(date) {
+      const data = read()
+      data.sessions = data.sessions.filter((item) => item.date !== date)
       write(data)
     },
     async addRule(text, position) {

@@ -205,3 +205,50 @@ legend { padding: 0 6px; }
 .curve circle.breakeven { fill: var(--bone); }
 .curve .tick { fill: #6b6256; font-size: 12px; font-family: Barlow, "Segoe UI", sans-serif; }
 
+.ok-line { color: #176b34; }
+.breach { color: #9d1c1c; border: 2px solid #9d1c1c; padding: 8px; }
+.funds { display: grid; gap: 12px; }
+.fund-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.fund-card { border: 3px solid var(--ink); background: #fffaf3; padding: 12px; display: grid; gap: 8px; }
+.fund-card header { display: flex; gap: 10px; align-items: center; }
+.fund-card header strong { display: block; }
+.fund-card.busted { background: #f8d0c8; }
+.fund-card.passed { background: #d7efd4; }
+.fund-balance { font-family: Anton, Impact, sans-serif; font-size: 2rem; line-height: 1; }
+.fund-form { display: grid; gap: 10px; }
+.fund-form h3 { margin: 8px 0 0; }
+.fund-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.meter-block { display: grid; gap: 4px; font-size: 0.8rem; }
+.meter { height: 12px; border: 2px solid var(--ink); background: #fff; }
+.meter span { display: block; height: 100%; background: #1f8a4c; }
+.meter.bad span { background: #c1121f; }
+.badge { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--ink); padding: 4px 8px; font-family: Anton, Impact, sans-serif; letter-spacing: 0.06em; font-size: 0.95rem; line-height: 1; }
+.badge svg { width: 16px; height: 16px; }
+.badge.topstep { background: #12100e; color: #7dffb3; }
+.badge.topstep svg { fill: #7dffb3; }
+.badge.lucid { background: #12100e; color: #d7c4ff; }
+.badge.lucid svg { fill: none; stroke: #d7c4ff; stroke-width: 2; }
+.firm-pick .badge { pointer-events: none; }
+
+.fund-chart { border: 3px solid var(--ink); background: #fffaf3; padding: 12px 12px 10px; display: grid; gap: 8px; }
+.fund-chart h3 { margin: 0; font-family: Anton, Impact, sans-serif; letter-spacing: 0.04em; }
+.fund-chart svg { width: 100%; height: auto; display: block; }
+.fund-plot { position: relative; }
+.fund-tag { position: absolute; transform: translate(calc(-100% - 12px), -50%); display: inline-flex; align-items: center; gap: 6px; background: #fffaf3; border: 2px solid var(--ink); padding: 2px 8px 2px 2px; pointer-events: none; }
+.fund-tag strong { font-family: Anton, Impact, sans-serif; font-size: 1rem; letter-spacing: 0.02em; }
+.fund-tag .badge { padding: 3px 6px; font-size: 0.72rem; }
+.fund-tag .badge svg { width: 14px; height: 14px; }
+
+.fund-chart .axis { stroke: var(--ink); stroke-width: 2.5; }
+.fund-chart .grid { stroke: #12100e; stroke-opacity: 0.16; stroke-width: 1; }
+.fund-chart .zero { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.fund-chart .tick { fill: #6b6556; font-size: 12px; font-family: Barlow, "Segoe UI", sans-serif; }
+.fund-chart .axis-name { fill: var(--ink); font-size: 13px; font-family: Anton, Impact, sans-serif; letter-spacing: 0.08em; }
+.fund-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.fund-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.fund-legend i { width: 22px; height: 6px; border: 2px solid var(--ink); display: inline-block; }
+.fund-legend strong { font-family: Anton, Impact, sans-serif; letter-spacing: 0.03em; }
+
+.fund-picks { display: grid; gap: 6px; }
+.fund-picks label { display: flex; align-items: center; gap: 8px; }
+.fund-picks input { width: auto; }

@@ -32,6 +32,8 @@ import {
 } from '../domain'
 import { unlockName } from '../unlocks'
 import type { PetStore } from '../store'
+import { dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, writeBook, type AccountBook, type FundAccount } from '../accounts'
+import { AccountsPanel } from './Accounts'
 import { Airport } from './Airport'
 import { AppleCube } from './AppleCube'
 
@@ -39,7 +41,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
   const [rules, setRules] = useState<RuleDef[]>([])
   const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'ano' | 'numeros' | 'reglas'>('ano')
+  const [tab, setTab] = useState<'ano' | 'numeros' | 'reglas' | 'cuentas'>('ano')
   const [cursor, setCursor] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
@@ -47,11 +49,15 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
   const [selected, setSelected] = useState<string | null>(null)
   const [punch, setPunch] = useState(false)
   const [burst, setBurst] = useState<string | null>(null)
+  const [book, setBook] = useState<AccountBook>(() => readBook())
 
   async function reload() {
     const [nextRules, nextSessions] = await Promise.all([store.loadRules(), store.loadSessions()])
+    const nextBook = pickBook(nextSessions, readBook())
+    writeBook(nextBook)
     setRules(nextRules)
     setSessions(nextSessions)
+    setBook(nextBook)
   }
 
   useEffect(() => {
@@ -70,6 +76,14 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
   const fruit = useMemo(() => orchard(sessions), [sessions])
   const streak = disciplineStreak(sessions)
   const nextPiece = unlockName(count + 1)
+
+  async function commitBook(next: AccountBook) {
+    const stamped = { ...next, updated: next.updated || new Date().toISOString() }
+    writeBook(stamped)
+    setBook(stamped)
+    const latest = [...sessions].sort((a, b) => b.date.localeCompare(a.date))[0]
+    if (latest) await persist({ ...latest, book: stamped })
+  }
 
   async function persist(session: SessionRecord) {
     const before = pieceForDate(session.date, ordered)
@@ -145,12 +159,14 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
         <button type="button" className={tab === 'ano' ? 'on' : ''} onClick={() => setTab('ano')}>Año</button>
         <button type="button" className={tab === 'numeros' ? 'on' : ''} onClick={() => setTab('numeros')}>Números</button>
         <button type="button" className={tab === 'reglas' ? 'on' : ''} onClick={() => setTab('reglas')}>Reglas</button>
+        <button type="button" className={tab === 'cuentas' ? 'on' : ''} onClick={() => setTab('cuentas')}>Cuentas</button>
       </nav>
 
       {tab === 'ano' && (
         <Calendar
           sessions={sessions}
           ordered={ordered}
+          accounts={book.accounts}
           year={cursor.year}
           month={cursor.month}
           onMonth={(year, month) => setCursor({ year, month })}
@@ -176,16 +192,20 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
         />
       )}
 
+      {tab === 'cuentas' && <AccountsPanel book={book} sessions={sessions} onSave={(next) => void commitBook(next)} />}
+
       {selected && (
         <DaySheet
           key={selected}
           dateKey={selected}
           rules={rules}
+          accounts={book.accounts}
           existing={sessions.find((session) => session.date === selected)}
           piece={pieceForDate(selected, ordered)}
+          history={sessions}
           onClose={() => setSelected(null)}
           onSave={async (session) => {
-            await persist(session)
+            await persist({ ...session, book })
             setSelected(null)
           }}
         />
@@ -195,10 +215,11 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
 }
 
 function Calendar({
-  sessions, ordered, year, month, onMonth, onPick,
+  sessions, ordered, accounts, year, month, onMonth, onPick,
 }: {
   sessions: SessionRecord[]
   ordered: SessionRecord[]
+  accounts: FundAccount[]
   year: number
   month: number
   onMonth: (year: number, month: number) => void
@@ -245,8 +266,11 @@ function Calendar({
               const piece = pieceForDate(key, ordered)
               const mark = session ? dayMark(session) : null
               const label = session?.status === 'rest' ? 'Descanso' : 'Libre'
+              const taken = (session?.operations ?? []).some((op) => (op.accounts?.length ?? 0) > 0)
+              const calls = taken ? dayCalls(accounts, session?.operations ?? []) : session?.balances ? judgeDay(accounts, sessions, key, session.balances) : []
+              const brokeRisk = calls.some((call) => !call.good)
               const title = mark
-                ? (piece > 0 ? 'Hito ' + piece + '. ' : '') + (mark.net > 0 ? 'Ganancia ' : mark.net < 0 ? 'Pérdida ' : 'En cero ') + mark.net + '. ' + (mark.letter === 'c' ? 'Cumplió las reglas.' : 'No cumplió las reglas.')
+                ? (piece > 0 ? 'Hito ' + piece + '. ' : '') + (mark.net > 0 ? 'Ganancia ' : mark.net < 0 ? 'Pérdida ' : 'En cero ') + mark.net + '. ' + (mark.letter === 'c' ? 'Cumplió las reglas.' : 'No cumplió las reglas.') + (brokeRisk ? ' Violaste el riesgo.' : '')
                 : label
               return (
                 <button
@@ -279,7 +303,7 @@ function Calendar({
 }
 
 function blankTrade(rules: RuleDef[]): TradeOp {
-  return { answers: blankAnswers(rules), result: null, learned: '', risk: 1, reward: 3 }
+  return { answers: blankAnswers(rules), result: null, learned: '', analysis: '', risk: 1, reward: 3 }
 }
 
 function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): TradeOp[] {
@@ -299,12 +323,14 @@ function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): Trad
 }
 
 function DaySheet({
-  dateKey, rules, existing, piece, onClose, onSave,
+  dateKey, rules, accounts, existing, piece, history, onClose, onSave,
 }: {
   dateKey: string
   rules: RuleDef[]
+  accounts: FundAccount[]
   existing?: SessionRecord
   piece: number
+  history: SessionRecord[]
   onClose: () => void
   onSave: (session: SessionRecord) => Promise<void>
 }) {
@@ -316,8 +342,19 @@ function DaySheet({
   const [note, setNote] = useState(existing?.note ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
   const current = ops[Math.min(active, ops.length - 1)]
   const clean = operationsPass(ops)
+  const leaders = accounts.filter((account) => !account.replicaOf || !accounts.some((item) => item.id === account.replicaOf))
+  const calls = dayCalls(accounts, ops)
+  const breaches = calls.filter((call) => !call.good)
+  const pastAnalyses = history.flatMap((session) =>
+    (session.operations ?? []).map((op, index) => ({
+      key: session.date + "-" + index,
+      label: session.date + " · " + (op.analysis ?? "").trim().replace(/\s+/g, " ").slice(0, 48),
+      text: (op.analysis ?? "").trim(),
+    })).filter((item) => item.text),
+  )
 
   function update(next: TradeOp) {
     setOps((list) => list.map((op, index) => (index === active ? next : op)))
@@ -365,7 +402,7 @@ function DaySheet({
             note,
             answers: ops[0].answers,
             operations: ops.map((op) => ({ ...op, risk: normalizeStake(op.risk), reward: normalizeStake(op.reward, 3) })),
-            disciplined: operationsPass(ops),
+            disciplined: operationsPass(ops) && breaches.length === 0,
           })
         }}
       >
@@ -463,9 +500,113 @@ function DaySheet({
                   ¿Qué aprendí en esta operación?
                   <textarea value={current.learned} rows={3} maxLength={500} onChange={(event) => update({ ...current, learned: event.target.value })} />
                 </label>
-                <p className={clean ? 'ok-line' : 'fine'}>
-                  {clean ? 'Todas las operaciones respetaron las reglas. El día construye el aeropuerto.' : 'Si una operación rompe las reglas, el día se guarda y no se pierde nada, pero no suma hito.'}
-                  {piece > 0 ? ` Esta fecha ya era el día ${piece}.` : ''}
+                <label>
+                  Análisis realizado
+                  <textarea
+                    value={current.analysis ?? ""}
+                    rows={4}
+                    maxLength={2000}
+                    onChange={(event) => {
+                      setCopied(false)
+                      update({ ...current, analysis: event.target.value })
+                    }}
+                  />
+                </label>
+                <div className="row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = (current.analysis ?? "").trim()
+                      if (!text) return
+                      void navigator.clipboard.writeText(text).then(() => setCopied(true)).catch(() => setError("No se pudo copiar. Selecciona el texto del análisis."))
+                    }}
+                  >{copied ? "Copiado" : "Copiar análisis"}</button>
+                </div>
+                {pastAnalyses.length > 0 && (
+                  <label>
+                    Traer un análisis anterior
+                    <select
+                      value=""
+                      onChange={(event) => {
+                        const found = pastAnalyses.find((item) => item.key === event.target.value)
+                        if (!found) return
+                        setCopied(false)
+                        update({ ...current, analysis: found.text })
+                      }}
+                    >
+                      <option value="">Elegir uno</option>
+                      {pastAnalyses.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                    </select>
+                  </label>
+                )}
+                <fieldset>
+                  <legend>Cuenta de fondeo</legend>
+                  {accounts.length === 0 ? <p className="fine">Cuando abras una cuenta, aquí eliges en cuál tomaste la operación.</p> : (
+                    <>
+                      <div className="choice">
+                        <button
+                          type="button"
+                          className={leaders.length > 0 && leaders.every((account) => (current.accounts ?? []).includes(account.id)) ? "on" : ""}
+                          onClick={() => {
+                            const ids = leaders.map((account) => account.id)
+                            const all = ids.every((id) => (current.accounts ?? []).includes(id))
+                            update({ ...current, accounts: all ? [] : ids })
+                          }}
+                        >Todas</button>
+                      </div>
+                      <div className="fund-picks">
+                        {accounts.map((account) => {
+                          const leader = accounts.find((item) => item.id === account.replicaOf)
+                          const explicit = (current.accounts ?? []).includes(account.id)
+                          const on = withReplicas(current.accounts ?? [], accounts).includes(account.id)
+                          const follows = on && !explicit
+                          const source = accounts.find((item) => item.id !== account.id && (current.accounts ?? []).includes(item.id) && withReplicas([item.id], accounts).includes(account.id))
+                          return (
+                            <label key={account.id}>
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                disabled={follows}
+                                onChange={() => {
+                                  const selected = new Set(current.accounts ?? [])
+                                  if (selected.has(account.id)) selected.delete(account.id)
+                                  else selected.add(account.id)
+                                  update({ ...current, accounts: [...selected] })
+                                }}
+                              />
+                              {account.name}
+                              {follows && source ? <span className="fine"> entra con {source.name}</span> : leader ? <span className="fine"> réplica de {leader.name}</span> : null}
+                            </label>
+                          )
+                        })}
+                      </div>
+                      <p className="fine">
+                        {withReplicas(current.accounts ?? [], accounts).length === 0
+                          ? "Marca la cuenta. Puedes tomar la misma operación en todas. Una pérdida resta el riesgo y una ganancia lo multiplica por el ratio."
+                          : (current.result === "win" || current.result === "loss")
+                            ? withReplicas(current.accounts ?? [], accounts).map((id) => {
+                                const account = accounts.find((item) => item.id === id)
+                                if (!account) return ""
+                                const move = opDollars(account, current)
+                                return account.name + " " + (move > 0 ? "+" : "") + money(move)
+                              }).filter(Boolean).join(" · ")
+                            : "La misma operación entra en la cuenta marcada y en todo el grupo que replica."}
+                      </p>
+                    </>
+                  )}
+                </fieldset>
+                {breaches.map((call) => (
+                  <p key={call.accountId} className="breach" role="alert">
+                    {'Violaste el riesgo de ' + call.name + '. Perdiste ' + money(call.lost) + ' y tu límite es ' + money(accounts.find((account) => account.id === call.accountId)?.risk ?? 0) + '. El día se guarda y el aeropuerto no avanza.'}
+                  </p>
+                ))}
+                <p className={clean && breaches.length === 0 ? 'ok-line' : 'fine'}>
+                  {breaches.length > 0
+                    ? 'Una cuenta se pasó de tu riesgo. El día se guarda y no suma hito.'
+                    : clean
+                      ? 'Las reglas salieron y el riesgo se respetó. El día construye el aeropuerto.'
+                      : 'Si una operación rompe las reglas, el día se guarda y no se pierde nada, pero no suma hito.'}
+                  {piece > 0 ? ' Esta fecha ya era el día ' + piece + '.' : ''}
                 </p>
                 <p>{current.result ? lossLine(current.result, answersPass(current.answers)) : 'Puedes cerrar en pérdida y aun así construir.'}</p>
               </>

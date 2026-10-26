@@ -116,6 +116,14 @@ export async function saveSession(userId: string, session: SessionRecord): Promi
   if (recomputed.error) throw new Error(recomputed.error.message)
 }
 
+export async function deleteSession(userId: string, date: string): Promise<void> {
+  const db = client()
+  const { error } = await db.from('sessions').delete().eq('user_id', userId).eq('session_date', date)
+  if (error) throw new Error(error.message)
+  const recomputed = await db.rpc('recompute_unlocks')
+  if (recomputed.error) throw new Error(recomputed.error.message)
+}
+
 export async function addRule(userId: string, text: string, position: number): Promise<void> {
   const { error } = await client().from('rules').insert({
     user_id: userId,
@@ -139,19 +147,24 @@ export async function removeRule(id: string): Promise<void> {
 
 
 function packAnswers(session: SessionRecord): unknown {
-  if (session.operations && session.operations.length > 0) {
-    return { v: 2, answers: session.answers, operations: session.operations }
+  const operations = session.operations ?? []
+  const balances = session.balances ?? []
+  if (operations.length > 0 || balances.length > 0 || session.book) {
+    return { v: 3, answers: session.answers, operations, balances, book: session.book ?? null }
   }
   return session.answers
 }
 
-function unpackAnswers(raw: unknown): { answers: Answer[]; operations?: TradeOp[] } {
+function unpackAnswers(raw: unknown): { answers: Answer[]; operations?: TradeOp[]; balances?: SessionRecord['balances']; book?: SessionRecord['book'] } {
   if (Array.isArray(raw)) return { answers: raw as Answer[] }
   if (raw && typeof raw === "object" && Array.isArray((raw as { operations?: unknown }).operations)) {
     const packed = raw as { answers?: unknown; operations: TradeOp[] }
+    const bag = packed as { answers?: unknown; operations: TradeOp[]; balances?: SessionRecord['balances']; book?: SessionRecord['book'] }
     return {
-      answers: Array.isArray(packed.answers) ? (packed.answers as Answer[]) : [],
-      operations: packed.operations.slice(0, 3),
+      answers: Array.isArray(bag.answers) ? (bag.answers as Answer[]) : [],
+      operations: bag.operations.slice(0, 3),
+      balances: Array.isArray(bag.balances) ? bag.balances : undefined,
+      book: bag.book && Array.isArray(bag.book.accounts) ? bag.book : undefined,
     }
   }
   return { answers: [] }
@@ -162,6 +175,7 @@ export function remoteStore(userId: string): PetStore {
     loadRules: () => loadRules(userId),
     loadSessions: () => loadSessions(userId),
     saveSession: (session) => saveSession(userId, session),
+    deleteSession: (date) => deleteSession(userId, date),
     addRule: (text, position) => addRule(userId, text, position),
     renameRule,
     removeRule,
