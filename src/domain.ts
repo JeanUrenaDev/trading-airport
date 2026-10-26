@@ -233,6 +233,11 @@ export function monthStats(sessions: SessionRecord[], year: number, month: numbe
   }
 }
 
+export function crewCount(day: number): number {
+  if (!Number.isFinite(day) || day < 1) return 0
+  return Math.min(64, Math.floor(day))
+}
+
 export function formName(day: number): string {
   if (day > 365) return 'Expansión'
   if (day >= 365) return 'Leyenda'

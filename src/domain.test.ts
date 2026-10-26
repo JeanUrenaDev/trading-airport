@@ -3,6 +3,7 @@ import {
   answersPass,
   operationsPass,
   disciplineStreak,
+  crewCount,
   formName,
   monthMatrix,
   monthStats,
@@ -103,6 +104,11 @@ describe('año', () => {
   })
 
   it('cambia de etapa y sigue después de la mansión', () => {
+    expect(crewCount(0)).toBe(0)
+    expect(crewCount(1)).toBe(1)
+    expect(crewCount(12)).toBe(12)
+    expect(crewCount(64)).toBe(64)
+    expect(crewCount(400)).toBe(64)
     expect(formName(0)).toBe('Nada')
     expect(formName(1)).toBe('Aeródromo')
     expect(formName(90)).toBe('Pista')

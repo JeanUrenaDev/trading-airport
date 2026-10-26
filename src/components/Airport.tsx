@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { formName } from '../domain'
+import { crewCount, formName } from '../domain'
 
 type Mat = { metal?: number; rough?: number; emi?: number; eint?: number; opacity?: number }
 
@@ -14,6 +14,14 @@ type Live = {
   traffic: THREE.Object3D[]
   sock?: THREE.Object3D
   lights: THREE.Object3D[]
+  crew: Crew[]
+}
+
+type Crew = {
+  mesh: THREE.Group
+  path: Array<[number, number]>
+  phase: number
+  speed: number
 }
 
 export function Airport({ day }: { day: number }) {
@@ -103,7 +111,7 @@ export function Airport({ day }: { day: number }) {
     el.addEventListener('pointermove', onMove)
     el.addEventListener('pointerup', onUp)
 
-    const live: Live = { trucks: [], birds: [], clouds: [], traffic: [], lights: [] }
+    const live: Live = { trucks: [], birds: [], clouds: [], traffic: [], lights: [], crew: [] }
     let built = -1
     let frame = 0
     const clock = new THREE.Clock()
@@ -125,6 +133,7 @@ export function Airport({ day }: { day: number }) {
         live.clouds = []
         live.traffic = []
         live.lights = []
+        live.crew = []
         live.flyer = undefined
         live.prop = undefined
         live.rotor = undefined
@@ -164,6 +173,7 @@ export function Airport({ day }: { day: number }) {
         plane.position.y = (plane.userData.laneY as number) + Math.sin(time * 0.18 + phase) * 0.18
         plane.position.z = plane.userData.laneZ as number
       })
+      live.crew.forEach((member) => walkCrew(member, time))
       if (live.sock) live.sock.rotation.z = Math.sin(time * 1.6) * 0.35
       const glow = 0.15 + (1 - cycle) * 0.9
       live.lights.forEach((light, index) => {
@@ -193,8 +203,8 @@ export function Airport({ day }: { day: number }) {
   }, [])
 
   return (
-    <div className="airport" ref={host} role="img" aria-label={`Día ${day}. ${formName(day)}. Aeropuerto isométrico.`}>
-      <p className="map-hint">Arrastra para moverte. Rueda para acercar.</p>
+    <div className="airport" ref={host} role="img" aria-label={`Día ${day}. ${formName(day)}. Personal ${crewCount(day)}. Aeropuerto isométrico.`}>
+      <p className="map-hint">Arrastra para moverte. Rueda para acercar.{day > 0 ? ` Personal: ${crewCount(day)}` : ''}</p>
     </div>
   )
 }
@@ -371,6 +381,7 @@ function buildAirport(root: THREE.Group, day: number, live: Live) {
     if (day >= 86) live.trucks.push(truck(root, -4, 11, 0xf7f4ee, 2.2))
     if (day >= 112) live.trucks.push(truck(root, 2, 11, 0xff4d1c, 2))
   }
+  placeStaff(root, day, live)
 }
 
 
@@ -833,6 +844,95 @@ function aircraft(root: THREE.Group, kind: 'prop' | 'jet' | 'wide', x: number, z
   group.position.set(x, 0, z)
   root.add(group)
   return group
+}
+
+const VESTS = [0xff4d1c, 0xf5c451, 0x1d4e89, 0xf4ecdf, 0x2f6b4f]
+
+function workRoutes(day: number): Array<Array<[number, number]>> {
+  const routes: Array<Array<[number, number]>> = [
+    [[-13.4, 10.2], [-8.1, 10.2], [-8.1, 14.9], [-13.4, 14.9]],
+    [[-6.5, 5.4], [1.5, 5.1], [5.5, 6.6], [-1.5, 7.4]],
+  ]
+  if (day >= 36) routes.push([[8.4, 9.6], [15.6, 9.6], [15.6, 10.8], [8.4, 10.8]])
+  if (day >= 60) routes.push([[-5, 12.15], [7, 12.15], [7, 11.2], [-5, 11.2]])
+  if (day >= 114) routes.push([[-23.2, 14.7], [-16.6, 14.7], [-16.6, 15.6], [-23.2, 15.6]])
+  if (day >= 176) routes.push([[12.2, 15.2], [19.4, 15.2], [19.4, 21.2], [12.2, 21.2]])
+  if (day >= 272) routes.push([[-10, -12.2], [10, -12.2], [10, -11.2], [-10, -11.2]])
+  return routes
+}
+
+function placeStaff(root: THREE.Group, day: number, live: Live) {
+  const count = crewCount(day)
+  if (count === 0) return
+  const routes = workRoutes(day)
+  const skin = material(0xf0c7a0, { rough: 0.6 })
+  const cloth = material(0x2a241c, { rough: 0.75 })
+  const vests = VESTS.map((color) => material(color, { rough: 0.55 }))
+  const leg = new THREE.BoxGeometry(0.1, 0.34, 0.1)
+  leg.translate(0, -0.17, 0)
+  const body = new THREE.BoxGeometry(0.3, 0.36, 0.16)
+  const head = new THREE.SphereGeometry(0.12, 8, 6)
+  const cap = new THREE.BoxGeometry(0.2, 0.06, 0.2)
+  for (let index = 0; index < count; index += 1) {
+    const mesh = new THREE.Group()
+    const left = new THREE.Mesh(leg, cloth)
+    left.position.set(-0.07, 0.34, 0)
+    const right = new THREE.Mesh(leg, cloth)
+    right.position.set(0.07, 0.34, 0)
+    const torso = new THREE.Mesh(body, vests[index % vests.length])
+    torso.position.y = 0.52
+    const face = new THREE.Mesh(head, skin)
+    face.position.y = 0.82
+    const brim = new THREE.Mesh(cap, vests[index % vests.length])
+    brim.position.y = 0.94
+    mesh.add(left, right, torso, face, brim)
+    mesh.scale.setScalar(1.4)
+    mesh.userData.legs = [left, right]
+    root.add(mesh)
+    live.crew.push({
+      mesh,
+      path: routes[index % routes.length],
+      phase: index * 1.7,
+      speed: 0.85 + (index % 5) * 0.12,
+    })
+  }
+}
+
+function walkCrew(member: Crew, time: number) {
+  const path = member.path
+  const count = path.length
+  let total = 0
+  const lengths: number[] = []
+  for (let index = 0; index < count; index += 1) {
+    const from = path[index]
+    const to = path[(index + 1) % count]
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1])
+    lengths.push(length)
+    total += length
+  }
+  if (total === 0) return
+  let distance = ((time * member.speed + member.phase) % total + total) % total
+  for (let index = 0; index < count; index += 1) {
+    const length = lengths[index]
+    if (distance > length && index < count - 1) {
+      distance -= length
+      continue
+    }
+    const from = path[index]
+    const to = path[(index + 1) % count]
+    const along = length === 0 ? 0 : distance / length
+    member.mesh.position.set(
+      from[0] + (to[0] - from[0]) * along,
+      0.02 + Math.abs(Math.sin(time * 7 + member.phase)) * 0.03,
+      from[1] + (to[1] - from[1]) * along,
+    )
+    member.mesh.rotation.y = Math.atan2(to[0] - from[0], to[1] - from[1])
+    const swing = Math.sin(time * 7 + member.phase) * 0.5
+    const legs = member.mesh.userData.legs as THREE.Object3D[]
+    legs[0].rotation.x = swing
+    legs[1].rotation.x = -swing
+    return
+  }
 }
 
 function box(root: THREE.Group, w: number, h: number, d: number, x: number, y: number, z: number, color: number, mat: Mat = {}) {

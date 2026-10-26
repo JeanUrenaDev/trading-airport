@@ -162,7 +162,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
             <div><dt>Racha</dt><dd>{streak}</dd></div>
             <div><dt>Siguiente</dt><dd>{nextPiece ?? 'Año cerrado'}</dd></div>
           </dl>
-          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. Hay una pecera por cuenta, y el agua de cada una sube con lo que esa cuenta lleva.</p>
+          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. Hay una pecera por cuenta, y el agua de cada una sube con lo que esa cuenta lleva. Cada día limpio suma una persona al personal.</p>
           <ol className="rail">
             {[
               [30, 'Aeródromo'],
