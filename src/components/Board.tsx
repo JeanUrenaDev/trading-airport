@@ -423,6 +423,17 @@ function DaySheet({
   const [copied, setCopied] = useState(false)
   const [cashDraft, setCashDraft] = useState<Record<string, string>>({})
   const current = ops[Math.min(active, ops.length - 1)]
+  const shown: TradeOp = (() => {
+    const amounts = { ...(current.amounts ?? {}) }
+    for (const [key, raw] of Object.entries(cashDraft)) {
+      if (!key.startsWith(active + ':')) continue
+      const id = key.slice(String(active).length + 1)
+      const value = Number(raw)
+      if (raw === '' || raw === '-' || !Number.isFinite(value)) continue
+      amounts[id] = value
+    }
+    return Object.keys(amounts).length > 0 ? { ...current, amounts } : current
+  })()
   const clean = operationsPass(ops)
   const leaders = accounts.filter((account) => !account.replicaOf || !accounts.some((item) => item.id === account.replicaOf))
   const calls = dayCalls(accounts, ops)
@@ -617,7 +628,7 @@ function DaySheet({
                           const follows = on && !explicit
                           const source = accounts.find((item) => item.id !== account.id && (current.accounts ?? []).includes(item.id) && withReplicas([item.id], accounts).includes(account.id))
                           return (
-                            <div key={account.id} className="fund-row">
+                            <div key={account.id} className={follows ? 'fund-row follows' : 'fund-row'}>
                               <label>
                                 <input
                                   type="checkbox"
@@ -631,19 +642,20 @@ function DaySheet({
                                     update(withAmounts({ ...current, accounts: [...selected] }, accounts, existing?.operations?.[active]))
                                   }}
                                 />
-                                {account.name}
-                                {follows && source ? <span className="fine"> entra con {source.name}</span> : leader ? <span className="fine"> réplica de {leader.name}</span> : null}
+                                <span>
+                                  {account.name}
+                                  {follows && source ? <em> misma plata</em> : leader ? <em> réplica</em> : null}
+                                </span>
                               </label>
-                              {!follows && (current.result === 'win' || current.result === 'loss') && (
+                              {!follows && (current.result === 'win' || current.result === 'loss') ? (
                                 <input
                                   className="cash"
-                                  type="number"
-                                  step={0.01}
+                                  type="text"
                                   inputMode="decimal"
                                   aria-label={'Plata de ' + account.name}
                                   value={cashDraft[active + ':' + account.id] ?? (current.amounts?.[account.id] ?? '')}
                                   onChange={(event) => {
-                                    const raw = event.target.value
+                                    const raw = event.target.value.replace(/[^\d.-]/g, '')
                                     if (raw !== '' && !/^-?\d*\.?\d*$/.test(raw)) return
                                     const key = active + ':' + account.id
                                     setCashDraft((prev) => ({ ...prev, [key]: raw }))
@@ -660,22 +672,19 @@ function DaySheet({
                                     update({ ...current, accounts: [...selected], amounts, pnl: undefined })
                                   }}
                                 />
-                              )}
+                              ) : follows && (current.result === 'win' || current.result === 'loss') ? (
+                                <strong className="cash-same">{money(opDollars(account, shown, accounts))}</strong>
+                              ) : null}
                             </div>
                           )
                         })}
                       </div>
                       <p className="fine">
                         {withReplicas(current.accounts ?? [], accounts).length === 0
-                          ? "Marca la cuenta. Cada una lleva su plata. Una copia usa la misma que la cuenta que sigue."
+                          ? "Escribe la plata en cada cuenta. Una copia repite ese número."
                           : (current.result === "win" || current.result === "loss")
-                            ? withReplicas(current.accounts ?? [], accounts).map((id) => {
-                                const account = accounts.find((item) => item.id === id)
-                                if (!account) return ""
-                                const move = opDollars(account, current, accounts)
-                                return account.name + " " + (move > 0 ? "+" : "") + money(move)
-                              }).filter(Boolean).join(" · ") + " " + pnlLine(current, accounts)
-                            : "La misma operación entra en la cuenta marcada y en todo el grupo que replica."}
+                            ? pnlLine(shown, accounts)
+                            : "La copia entra con la cuenta que marques."}
                       </p>
                     </>
                   )}
