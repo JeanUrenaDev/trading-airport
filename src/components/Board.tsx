@@ -384,6 +384,49 @@ function settleOp(op: TradeOp, book: FundAccount[]): TradeOp {
   }
 }
 
+function sourceCash(account: FundAccount, op: TradeOp, book: FundAccount[]): number {
+  const members = book.filter((item) =>
+    item.id !== account.id
+    && (op.accounts ?? []).includes(item.id)
+    && withReplicas([item.id], book).includes(account.id),
+  )
+  const source = members.find((item) => !members.some((other) => other.id === item.replicaOf)) ?? members[0]
+  if (!source) return opDollars(account, { ...op, amounts: undefined }, book)
+  const own = op.amounts?.[source.id]
+  if (own != null && Number.isFinite(own)) return own
+  return opDollars(source, { ...op, amounts: undefined }, book)
+}
+
+function cashTextFor(account: FundAccount, op: TradeOp, book: FundAccount[], explicit: boolean, follows: boolean, draft?: string): string {
+  if (draft != null) return draft
+  const own = op.amounts?.[account.id]
+  if (own != null && Number.isFinite(own)) return String(own)
+  if (!explicit && !follows) return ''
+  if (op.result !== 'win' && op.result !== 'loss') return ''
+  const dollars = follows ? sourceCash(account, op, book) : opDollars(account, { ...op, amounts: undefined }, book)
+  if (!Number.isFinite(dollars) || dollars === 0) return ''
+  return String(Math.round(dollars * 100) / 100)
+}
+
+function fillShownCash(op: TradeOp, book: FundAccount[]): TradeOp {
+  if (op.result !== 'win' && op.result !== 'loss') return op
+  const amounts: Record<string, number> = { ...(op.amounts ?? {}) }
+  let changed = false
+  for (const id of op.accounts ?? []) {
+    if (amounts[id] != null && Number.isFinite(amounts[id])) continue
+    const account = book.find((item) => item.id === id)
+    if (!account) continue
+    const text = cashTextFor(account, op, book, true, false)
+    if (text === '' || text === '-') continue
+    const value = Number(text)
+    if (!Number.isFinite(value)) continue
+    amounts[id] = value
+    changed = true
+  }
+  if (!changed) return op
+  return { ...op, amounts, pnl: undefined }
+}
+
 function pnlLine(op: TradeOp, book: FundAccount[]): string {
   const first = book.find((item) => (op.accounts ?? []).includes(item.id))
   const cash = first ? cleanPnl(op.amounts?.[first.id]) ?? cleanPnl(op.pnl) : undefined
@@ -501,19 +544,20 @@ function DaySheet({
             setError('Cada operación necesita ganancia, pérdida o tablas.')
             return
           }
-          if (ops.some((op, index) => missingPnl(op, existing?.operations?.[index]))) {
+          const ready = ops.map((op) => fillShownCash(op, accounts))
+          if (ready.some((op, index) => missingPnl(op, existing?.operations?.[index]))) {
             setError('Escribe cuánto ganaste o perdiste en cada operación.')
             return
           }
           void save({
             date: dateKey,
             status: 'completed',
-            result: ops[0].result,
-            learned: ops.map((op) => op.learned).filter(Boolean).join(' · '),
+            result: ready[0].result,
+            learned: ready.map((op) => op.learned).filter(Boolean).join(' · '),
             note,
-            answers: ops[0].answers,
-            operations: ops.map((op) => settleOp(op, accounts)),
-            disciplined: operationsPass(ops) && breaches.length === 0,
+            answers: ready[0].answers,
+            operations: ready.map((op) => settleOp(op, accounts)),
+            disciplined: operationsPass(ready) && breaches.length === 0,
           })
         }}
       >
@@ -663,13 +707,14 @@ function DaySheet({
                                   {follows && source ? <em> misma plata</em> : leader ? <em> réplica</em> : null}
                                 </span>
                               </label>
-                              {!follows && (current.result === 'win' || current.result === 'loss') ? (
+                              {(explicit || follows) && (current.result === 'win' || current.result === 'loss') ? (
                                 <input
                                   className="cash"
                                   type="text"
                                   inputMode="decimal"
                                   aria-label={'Plata de ' + account.name}
-                                  value={cashDraft[active + ':' + account.id] ?? (current.amounts?.[account.id] ?? '')}
+                                  placeholder="monto"
+                                  value={cashTextFor(account, current, accounts, explicit, follows, cashDraft[active + ':' + account.id])}
                                   onChange={(event) => {
                                     const raw = event.target.value.replace(/[^\d.-]/g, '')
                                     if (raw !== '' && !/^-?\d*\.?\d*$/.test(raw)) return
@@ -678,7 +723,7 @@ function DaySheet({
                                     const amounts = { ...(current.amounts ?? {}) }
                                     const selected = new Set(current.accounts ?? [])
                                     const next = Number(raw)
-                                    if (raw === '' || !Number.isFinite(next)) {
+                                    if (raw === '' || raw === '-' || !Number.isFinite(next)) {
                                       delete amounts[account.id]
                                       if (raw === '') selected.delete(account.id)
                                     } else {
@@ -688,8 +733,6 @@ function DaySheet({
                                     update({ ...current, accounts: [...selected], amounts, pnl: undefined })
                                   }}
                                 />
-                              ) : follows && (current.result === 'win' || current.result === 'loss') ? (
-                                <strong className="cash-same">{money(opDollars(account, shown, accounts))}</strong>
                               ) : null}
                             </div>
                           )
@@ -697,7 +740,7 @@ function DaySheet({
                       </div>
                       <p className="fine">
                         {withReplicas(current.accounts ?? [], accounts).length === 0
-                          ? "Escribe la plata en cada cuenta. Una copia repite ese número."
+                          ? "Escribe la plata en el recuadro de cada cuenta. Una copia repite ese número hasta que le cambies el suyo."
                           : (current.result === "win" || current.result === "loss")
                             ? pnlLine(shown, accounts)
                             : "La copia entra con la cuenta que marques."}
