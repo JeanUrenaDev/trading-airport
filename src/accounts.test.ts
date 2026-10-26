@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyType, crateFill, crateTotals, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, withinDailyRisk, type FundAccount, type TakenOp } from "./accounts"
+import { applyType, crateFill, crateLevels, crateTotals, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, withinDailyRisk, type FundAccount, type TakenOp } from "./accounts"
 
 const topstep: FundAccount = {
   id: "a",
@@ -192,6 +192,12 @@ describe("cuentas de fondeo", () => {
     const account = { ...topstep, balance: 50000 }
     const sessions = [{ date: "2026-10-26", operations: [{ result: "win" as const, accounts: ["a"], amounts: { a: 1500 } }] }]
     expect(crateTotals([account], sessions)).toEqual({ carried: 1500, goal: 3000 })
+    const copy = { ...account, id: "b", name: "Lucid", balance: 50000 }
+    const split = [{ date: "2026-10-26", operations: [{ result: "win" as const, accounts: ["a", "b"], amounts: { a: 1500, b: 600 } }] }]
+    expect(crateLevels([account, copy], split)).toEqual([
+      { name: "Topstep 50K", carried: 1500, goal: 3000 },
+      { name: "Lucid", carried: 600, goal: 3000 },
+    ])
   })
 
   it("un balance chico es la ganancia y entra en la escala de la cuenta", () => {

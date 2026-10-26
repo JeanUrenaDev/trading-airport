@@ -165,6 +165,35 @@ export function crateFill(carried: number, goal: number): number {
   return Math.min(1, carried / goal)
 }
 
+export interface CrateLevel {
+  name: string
+  carried: number
+  goal: number
+}
+
+/** One tank per funded account. The water is that account's profit against its own goal. */
+export function crateLevels(
+  accounts: FundAccount[],
+  sessions: { date: string; operations?: TakenOp[] }[],
+): CrateLevel[] {
+  return accounts.map((account) => {
+    let carried = 0
+    const path = runningBalance(account, accounts, sessions)
+    if (path.length > 0) {
+      const state = snapshot(
+        { ...account, balance: path[0]?.balance ?? account.balance },
+        path.filter((point) => point.date !== "Inicio"),
+      )
+      carried = state.pnl
+    }
+    return {
+      name: account.name,
+      carried,
+      goal: account.objective > 0 ? account.objective : 3000,
+    }
+  })
+}
+
 /** One crate: the number on it is the combined profit goal, and the fill is the combined gain. */
 export function crateTotals(
   accounts: FundAccount[],

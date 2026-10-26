@@ -33,11 +33,11 @@ import {
 } from '../domain'
 import { unlockName } from '../unlocks'
 import type { PetStore } from '../store'
-import { crateTotals, dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, withinDailyRisk, writeBook, type AccountBook, type FundAccount } from '../accounts'
+import { crateLevels, dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, withinDailyRisk, writeBook, type AccountBook, type FundAccount } from '../accounts'
 import { AccountsPanel } from './Accounts'
 import { TradesPanel } from './Trades'
 import { Airport } from './Airport'
-import { CashCrate } from './AppleCube'
+import { FishTank } from './AppleCube'
 
 export function Board({ store, onSignOut, banner, readOnly = false }: { store: PetStore; onSignOut?: () => void; banner?: string; readOnly?: boolean }) {
   const [rules, setRules] = useState<RuleDef[]>([])
@@ -75,7 +75,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
 
   const ordered = useMemo(() => orderedDisciplined(sessions), [sessions])
   const count = ordered.length
-  const crate = useMemo(() => crateTotals(book.accounts, sessions), [book.accounts, sessions])
+  const levels = useMemo(() => crateLevels(book.accounts, sessions), [book.accounts, sessions])
   const streak = disciplineStreak(sessions)
   const nextPiece = unlockName(count + 1)
 
@@ -148,11 +148,10 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
           <Airport day={count} />
           {burst ? <p className="burst">Día {count} · {burst}</p> : null}
         </div>
-        <Curve points={resultCurve(sessions)} />
         <div className="stage cube-stage">
-          <span className="window-label">Caja</span>
-          <CashCrate carried={crate.carried} goal={crate.goal} />
-          <p className="map-hint">{money(crate.carried)} de {money(crate.goal)}</p>
+          <span className="window-label">Pecera</span>
+          <FishTank levels={levels} />
+          <p className="map-hint">{levels.length === 0 ? '$0 de $3,000' : levels.map((level) => `${level.name} ${money(level.carried)}`).join(' · ')}</p>
         </div>
       </section>
         <aside className="dossier">
@@ -163,7 +162,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
             <div><dt>Racha</dt><dd>{streak}</dd></div>
             <div><dt>Siguiente</dt><dd>{nextPiece ?? 'Año cerrado'}</dd></div>
           </dl>
-          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. La gráfica y la caja van debajo, cada una en su recuadro.</p>
+          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. Hay una pecera por cuenta, y el agua de cada una sube con lo que esa cuenta lleva.</p>
           <ol className="rail">
             {[
               [30, 'Aeródromo'],
@@ -450,12 +449,12 @@ function fillShownCash(op: TradeOp, book: FundAccount[]): TradeOp {
 }
 
 function pnlLine(op: TradeOp, book: FundAccount[]): string {
-  if (op.result !== 'win' && op.result !== 'loss') return 'No mueve la caja.'
+  if (op.result !== 'win' && op.result !== 'loss') return 'No mueve el agua.'
   const touched = book.filter((account) => withReplicas(op.accounts ?? [], book).includes(account.id))
   let delta = 0
   for (const account of touched) delta += opDollars(account, op, book)
-  if (!Number.isFinite(delta) || delta === 0) return 'No mueve la caja.'
-  return delta > 0 ? `La caja sube ${money(delta)}.` : `La caja baja ${money(Math.abs(delta))}.`
+  if (!Number.isFinite(delta) || delta === 0) return 'No mueve el agua.'
+  return delta > 0 ? `El agua sube ${money(delta)}.` : `El agua baja ${money(Math.abs(delta))}.`
 }
 
 function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): TradeOp[] {
@@ -831,7 +830,6 @@ function Curve({ points }: { points: ReturnType<typeof resultCurve> }) {
         <h3>La gráfica</h3>
         <strong>{now}</strong>
       </div>
-      <p className="fine">La caja junta lo ganado en las cuentas. El número es la meta: a la mitad de la meta, va por la mitad.</p>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Curva de ganancias y pérdidas. Ahora ${now}.`}>
         <line className="zero" x1={padX} x2={width - padX} y1={yAt(0)} y2={yAt(0)} />
         <path d={line} />
