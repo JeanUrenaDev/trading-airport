@@ -309,6 +309,10 @@ export function runningBalance(account: FundAccount, accounts: FundAccount[], se
   return points
 }
 
+export function withinDailyRisk(accounts: FundAccount[], ops: TakenOp[]): boolean {
+  return dayCalls(accounts, ops).every((call) => call.good)
+}
+
 export function dayCalls(accounts: FundAccount[], ops: TakenOp[]): RiskCall[] {
   const calls: RiskCall[] = []
   for (const account of accounts) {

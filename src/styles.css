@@ -216,6 +216,10 @@ legend { padding: 0 6px; }
 .fund-card { border: 3px solid var(--ink); background: #fffaf3; padding: 12px; display: grid; gap: 8px; }
 .fund-card header { display: flex; gap: 10px; align-items: center; }
 .fund-card header strong { display: block; }
+.card-risk { display: flex; align-items: end; gap: 8px; }
+.card-risk label { flex: 1; margin: 0; }
+.card-risk input { width: 100%; }
+.card-risk button { flex: 0 0 auto; }
 .fund-card.busted { background: #f8d0c8; }
 .fund-card.passed { background: #d7efd4; }
 .fund-balance { font-family: Anton, Impact, sans-serif; font-size: 2rem; line-height: 1; }

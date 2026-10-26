@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyType, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, type FundAccount, type TakenOp } from "./accounts"
+import { applyType, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, withinDailyRisk, type FundAccount, type TakenOp } from "./accounts"
 
 const topstep: FundAccount = {
   id: "a",
@@ -97,6 +97,16 @@ describe("cuentas de fondeo", () => {
     expect(calls.find((call) => call.accountId === "a")?.lost).toBe(600)
     expect(calls.find((call) => call.accountId === "a")?.good).toBe(false)
     expect(calls.find((call) => call.accountId === "c")).toBeUndefined()
+  })
+
+  it("un riesgo de 300 no aguanta 325 y uno mayor sí", () => {
+    const tight = { ...topstep, risk: 300 }
+    const wide = { ...topstep, risk: 500 }
+    const ops = [{ result: "loss" as const, pnl: 325, accounts: ["a"] }]
+    expect(dayCalls([tight], ops)[0].lost).toBe(325)
+    expect(dayCalls([tight], ops)[0].good).toBe(false)
+    expect(withinDailyRisk([tight], ops)).toBe(false)
+    expect(withinDailyRisk([wide], ops)).toBe(true)
   })
 
   it("la plata escrita manda sobre el ratio", () => {

@@ -121,13 +121,13 @@ export function AccountsPanel({
     const previous = book.accounts.find((item) => item.id === editing)
     const account: FundAccount = {
       id: editing ?? crypto.randomUUID(),
-      firm: type.firm,
+      firm: previous?.firm ?? type.firm,
       name: name.trim(),
-      cost: type.cost,
-      start: type.start,
-      maxDd: type.maxDd,
-      objective: type.objective,
-      risk: type.risk,
+      cost: previous?.cost ?? type.cost,
+      start: previous?.start ?? type.start,
+      maxDd: previous?.maxDd ?? type.maxDd,
+      objective: previous?.objective ?? type.objective,
+      risk: previous?.risk ?? type.risk,
       balance,
       replicaOf: replicas.length > 0 ? undefined : previous?.replicaOf,
     }
@@ -138,7 +138,11 @@ export function AccountsPanel({
       if (item.replicaOf === account.id) return { ...item, replicaOf: undefined }
       return item
     })
-    publish(type, shareBalance(linked, [account.id, ...replicas], balance))
+    onSave({
+      updated: new Date().toISOString(),
+      accounts: shareBalance(linked, [account.id, ...replicas], balance),
+      types: typesOf(book),
+    })
     resetAccount()
   }
 
@@ -146,7 +150,7 @@ export function AccountsPanel({
     <section className="panel funds">
       <p className="kicker">Cuentas de fondeo</p>
       <h2>{book.accounts.length === 0 ? "Todavía no hay cuentas." : book.accounts.length === 1 ? "1 cuenta" : book.accounts.length + " cuentas"}</h2>
-      <p className="fine">El balance se pone una vez, el número completo. Después lo mueve la plata de cada trade. Si una ficha no cuadra, cámbiala en Trades.</p>
+      <p className="fine">El balance se pone una vez, el número completo. Después lo mueve la plata de cada trade. El riesgo del día está en cada ficha: si Topstep aguanta más, súbelo y guarda. Si la pérdida del día cabe ahí, el aeropuerto suma.</p>
 
       {book.accounts.length > 0 && <FundChart accounts={book.accounts} sessions={sessions} />}
 
@@ -162,9 +166,21 @@ export function AccountsPanel({
                 <FirmBadge firm={account.firm} />
                 <div>
                   <strong>{account.name}</strong>
-                  <p className="fine">Costo {money(account.cost)} · Riesgo {money(account.risk)}{leader ? " · Réplica de " + leader.name : ""}</p>
+                  <p className="fine">Costo {money(account.cost)}{leader ? " · Réplica de " + leader.name : ""}</p>
                 </div>
               </header>
+              <DayRisk
+                account={account}
+                locked={locked}
+                onSave={(risk) => {
+                  if (account.firm === firm && account.start === size) setRisk(String(risk))
+                  onSave({
+                    updated: new Date().toISOString(),
+                    accounts: book.accounts.map((item) => item.id === account.id ? { ...item, risk } : item),
+                    types: typesOf(book).map((item) => item.firm === account.firm && item.start === account.start ? { ...item, risk } : item),
+                  })
+                }}
+              />
               <p className="fund-balance">{logged ? money(state.balance) : "Sin balance"}</p>
               <p>{logged ? (state.pnl >= 0 ? "Vas ganando " + money(state.pnl) : "Vas abajo " + money(Math.abs(state.pnl))) : "Pon el balance inicial y esta ficha se llena."}</p>
               <Meter label={"DD " + money(state.drawdown) + " de " + money(account.maxDd)} value={account.maxDd > 0 ? state.drawdown / account.maxDd : 0} tone={state.room < account.risk ? "bad" : "good"} />
@@ -204,7 +220,7 @@ export function AccountsPanel({
 
       {!locked && <form className="fund-form" onSubmit={saveAccount}>
         <h3>{editing ? "Editar cuenta" : "Nueva cuenta " + firmName(firm) + " " + selected.label}</h3>
-        <p className="fine">Solo cambia el nombre y el balance. El resto sale del tipo.</p>
+        <p className="fine">Aquí cambias el nombre y el balance. El riesgo del día se edita en la ficha de la cuenta.</p>
         <div className="fund-fields">
           <label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} placeholder={firmName(firm) + " " + selected.label} /></label>
           <label>Balance inicial<input type="number" step="0.01" value={live} onChange={(event) => setLive(event.target.value)} placeholder={String(size + 350)} /></label>
@@ -236,6 +252,43 @@ export function AccountsPanel({
         </div>
       </form>}
     </section>
+  )
+}
+
+function DayRisk({ account, locked, onSave }: { account: FundAccount; locked: boolean; onSave: (risk: number) => void }) {
+  const [value, setValue] = useState(String(account.risk))
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    setValue(String(account.risk))
+    setSaved(false)
+  }, [account.risk])
+  if (locked) return <p className="fine">Riesgo del día {money(account.risk)}</p>
+  return (
+    <div className="card-risk">
+      <label>
+        Riesgo del día
+        <input
+          type="number"
+          min="1"
+          step="1"
+          aria-label={'Riesgo del día de ' + account.name}
+          value={value}
+          onChange={(event) => {
+            setSaved(false)
+            setValue(event.target.value)
+          }}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={() => {
+          const next = Number(value)
+          if (!Number.isFinite(next) || next <= 0) return
+          onSave(next)
+          setSaved(true)
+        }}
+      >{saved ? "Listo" : "Guardar"}</button>
+    </div>
   )
 }
 

@@ -34,7 +34,7 @@ import {
 } from '../domain'
 import { unlockName } from '../unlocks'
 import type { PetStore } from '../store'
-import { dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, writeBook, type AccountBook, type FundAccount } from '../accounts'
+import { dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, withinDailyRisk, writeBook, type AccountBook, type FundAccount } from '../accounts'
 import { AccountsPanel } from './Accounts'
 import { TradesPanel } from './Trades'
 import { Airport } from './Airport'
@@ -85,8 +85,31 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
     const stamped = { ...next, updated: next.updated || new Date().toISOString() }
     writeBook(stamped)
     setBook(stamped)
-    const latest = [...sessions].sort((a, b) => b.date.localeCompare(a.date))[0]
-    if (latest) await persist({ ...latest, book: stamped })
+    const revised = sessions.map((session) => {
+      const ops = session.operations ?? []
+      if (session.status !== 'completed' || ops.length === 0) return session
+      const disciplined = operationsPass(ops) && withinDailyRisk(stamped.accounts, ops)
+      return disciplined === session.disciplined ? session : { ...session, disciplined }
+    })
+    const pending = new Map<string, SessionRecord>()
+    revised.forEach((session, index) => {
+      if (session.disciplined !== sessions[index]?.disciplined) pending.set(session.date, { ...session, book: stamped })
+    })
+    const latest = [...revised].sort((a, b) => b.date.localeCompare(a.date))[0]
+    if (latest && !pending.has(latest.date)) pending.set(latest.date, { ...latest, book: stamped })
+    if (pending.size === 0) return
+    const before = ordered.length
+    for (const session of pending.values()) await store.saveSession(session)
+    const nextSessions = await store.loadSessions()
+    setSessions(nextSessions)
+    const after = orderedDisciplined(nextSessions).length
+    if (after > before) {
+      setBurst(unlockName(after))
+      setPunch(true)
+      window.setTimeout(() => setPunch(false), 700)
+    } else {
+      setBurst(null)
+    }
   }
 
   async function persist(session: SessionRecord) {
@@ -750,7 +773,7 @@ function DaySheet({
                 </fieldset>
                 {breaches.map((call) => (
                   <p key={call.accountId} className="breach" role="alert">
-                    {'Violaste el riesgo de ' + call.name + '. Perdiste ' + money(call.lost) + ' y tu límite es ' + money(accounts.find((account) => account.id === call.accountId)?.risk ?? 0) + '. El día se guarda y el aeropuerto no avanza.'}
+                    {'Violaste el riesgo de ' + call.name + '. Perdiste ' + money(call.lost) + ' y tu límite es ' + money(accounts.find((account) => account.id === call.accountId)?.risk ?? 0) + '. Si esa cuenta aguanta más, sube el riesgo del día en Cuentas. Si no, el día se guarda y el aeropuerto no avanza.'}
                   </p>
                 ))}
                 <p className={clean && breaches.length === 0 ? 'ok-line' : 'fine'}>
