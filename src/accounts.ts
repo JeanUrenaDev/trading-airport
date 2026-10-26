@@ -158,6 +158,33 @@ export function money(value: number): string {
   return sign + "$" + abs.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
 
+/** How full the cash crate is. 1500 toward a 3000 goal is half. */
+export function crateFill(carried: number, goal: number): number {
+  if (!Number.isFinite(goal) || goal <= 0) return 0
+  if (!Number.isFinite(carried) || carried <= 0) return 0
+  return Math.min(1, carried / goal)
+}
+
+/** One crate: the number on it is the combined profit goal, and the fill is the combined gain. */
+export function crateTotals(
+  accounts: FundAccount[],
+  sessions: { date: string; operations?: TakenOp[] }[],
+): { carried: number; goal: number } {
+  let carried = 0
+  let goal = 0
+  for (const account of accounts) {
+    if (account.objective > 0) goal += account.objective
+    const path = runningBalance(account, accounts, sessions)
+    if (path.length === 0) continue
+    const state = snapshot(
+      { ...account, balance: path[0]?.balance ?? account.balance },
+      path.filter((point) => point.date !== "Inicio"),
+    )
+    carried += state.pnl
+  }
+  return { carried, goal: goal > 0 ? goal : 3000 }
+}
+
 export function firmName(firm: Firm): string {
   return firm === "topstep" ? "Topstep" : "Lucid"
 }

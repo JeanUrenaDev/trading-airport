@@ -186,6 +186,8 @@ legend { padding: 0 6px; }
 .airport { position: absolute; inset: 0; touch-action: none; }
 .airport canvas { width: 100%; height: 100%; display: block; cursor: grab; }
 .airport canvas:active { cursor: grabbing; }
+.crate { position: absolute; inset: 0; }
+.crate canvas { width: 100%; height: 100%; display: block; }
 .map-hint {
   position: absolute;
   left: 14px;

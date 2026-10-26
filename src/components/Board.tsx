@@ -15,7 +15,6 @@ import {
   monthStats,
   cleanPnl,
   normalizeStake,
-  orchard,
   stakeFromPnl,
   resultCurve,
   orderedDisciplined,
@@ -34,11 +33,11 @@ import {
 } from '../domain'
 import { unlockName } from '../unlocks'
 import type { PetStore } from '../store'
-import { dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, withinDailyRisk, writeBook, type AccountBook, type FundAccount } from '../accounts'
+import { crateTotals, dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, withinDailyRisk, writeBook, type AccountBook, type FundAccount } from '../accounts'
 import { AccountsPanel } from './Accounts'
 import { TradesPanel } from './Trades'
 import { Airport } from './Airport'
-import { AppleCube } from './AppleCube'
+import { CashCrate } from './AppleCube'
 
 export function Board({ store, onSignOut, banner, readOnly = false }: { store: PetStore; onSignOut?: () => void; banner?: string; readOnly?: boolean }) {
   const [rules, setRules] = useState<RuleDef[]>([])
@@ -76,7 +75,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
 
   const ordered = useMemo(() => orderedDisciplined(sessions), [sessions])
   const count = ordered.length
-  const fruit = useMemo(() => orchard(sessions), [sessions])
+  const crate = useMemo(() => crateTotals(book.accounts, sessions), [book.accounts, sessions])
   const streak = disciplineStreak(sessions)
   const nextPiece = unlockName(count + 1)
 
@@ -151,9 +150,9 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
         </div>
         <Curve points={resultCurve(sessions)} />
         <div className="stage cube-stage">
-          <span className="window-label">Cubo</span>
-          <AppleCube apples={fruit.apples} people={fruit.people} ugly={fruit.ugly} />
-          <p className="map-hint">{fruit.apples} manzanas · {fruit.people} personas{fruit.ugly ? ' · feo' : ''}</p>
+          <span className="window-label">Caja</span>
+          <CashCrate carried={crate.carried} goal={crate.goal} />
+          <p className="map-hint">{money(crate.carried)} de {money(crate.goal)}</p>
         </div>
       </section>
         <aside className="dossier">
@@ -164,7 +163,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
             <div><dt>Racha</dt><dd>{streak}</dd></div>
             <div><dt>Siguiente</dt><dd>{nextPiece ?? 'Año cerrado'}</dd></div>
           </dl>
-          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. La gráfica y el cubo van debajo, cada uno en su recuadro.</p>
+          <p className="fine">Hasta 3 operaciones por día. El aeropuerto crece solo si todas respetaron las reglas. Un día sin operar no es un fallo. La gráfica y la caja van debajo, cada una en su recuadro.</p>
           <ol className="rail">
             {[
               [30, 'Aeródromo'],
@@ -451,18 +450,12 @@ function fillShownCash(op: TradeOp, book: FundAccount[]): TradeOp {
 }
 
 function pnlLine(op: TradeOp, book: FundAccount[]): string {
-  const first = book.find((item) => (op.accounts ?? []).includes(item.id))
-  const cash = first ? cleanPnl(op.amounts?.[first.id]) ?? cleanPnl(op.pnl) : undefined
-  const units = cash != null && first && first.risk > 0
-    ? stakeFromPnl(Math.abs(cash), first.risk)
-    : op.result === 'win'
-      ? normalizeStake(op.reward, 3)
-      : normalizeStake(op.risk)
-  const cosas = `${units} ${units === 1 ? 'manzana' : 'manzanas'} y ${units} ${units === 1 ? 'persona' : 'personas'}`
-  const quien = first ? ` El cubo usa ${first.name}.` : ''
-  if (units === 0) return `No mueve el cubo.${quien}`
-  if (op.result === 'win') return `Sumas ${cosas}.${quien}`
-  return `Quitas ${cosas}. Si no alcanzan, el cubo se pone feo.${quien}`
+  if (op.result !== 'win' && op.result !== 'loss') return 'No mueve la caja.'
+  const touched = book.filter((account) => withReplicas(op.accounts ?? [], book).includes(account.id))
+  let delta = 0
+  for (const account of touched) delta += opDollars(account, op, book)
+  if (!Number.isFinite(delta) || delta === 0) return 'No mueve la caja.'
+  return delta > 0 ? `La caja sube ${money(delta)}.` : `La caja baja ${money(Math.abs(delta))}.`
 }
 
 function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): TradeOp[] {
@@ -838,7 +831,7 @@ function Curve({ points }: { points: ReturnType<typeof resultCurve> }) {
         <h3>La gráfica</h3>
         <strong>{now}</strong>
       </div>
-      <p className="fine">Si escribiste la plata, el cubo la parte por el riesgo de la cuenta. Si no, ganar suma 3 y perder resta 1. Una tabla no se mueve.</p>
+      <p className="fine">La caja junta lo ganado en las cuentas. El número es la meta: a la mitad de la meta, va por la mitad.</p>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Curva de ganancias y pérdidas. Ahora ${now}.`}>
         <line className="zero" x1={padX} x2={width - padX} y1={yAt(0)} y2={yAt(0)} />
         <path d={line} />

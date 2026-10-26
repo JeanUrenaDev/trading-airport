@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { crateFill } from '../accounts'
 
-export function AppleCube({ apples, people, ugly }: { apples: number; people: number; ugly: boolean }) {
+export function CashCrate({ carried, goal }: { carried: number; goal: number }) {
   const host = useRef<HTMLDivElement>(null)
-  const live = useRef({ apples, people, ugly, span: 12 })
-  live.current = { apples, people, ugly, span: live.current.span }
+  const live = useRef({ carried, goal, span: 5.4 })
+  live.current = { carried, goal, span: live.current.span }
 
   useEffect(() => {
     const el = host.current
@@ -14,26 +15,26 @@ export function AppleCube({ apples, people, ugly }: { apples: number; people: nu
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.15
+    renderer.toneMappingExposure = 1.12
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     node.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x8ec8ef)
-    const camera = new THREE.OrthographicCamera(-12, 12, 12, -12, 0.1, 200)
-    camera.position.set(32, 26, 32)
-    const hemi = new THREE.HemisphereLight(0xfff6ea, 0x6d8a48, 0.95)
-    const sun = new THREE.DirectionalLight(0xfff3df, 1.45)
-    sun.position.set(-18, 28, 12)
+    scene.background = new THREE.Color(0x8a9148)
+    const camera = new THREE.OrthographicCamera(-5, 5, 5, -5, 0.1, 80)
+    camera.position.set(8.5, 5.8, 11)
+    const hemi = new THREE.HemisphereLight(0xfff6ea, 0x6d8a48, 0.9)
+    const sun = new THREE.DirectionalLight(0xfff3df, 1.35)
+    sun.position.set(-14, 22, 10)
     sun.castShadow = true
     sun.shadow.mapSize.set(1024, 1024)
     sun.shadow.camera.near = 1
-    sun.shadow.camera.far = 80
-    sun.shadow.camera.left = -24
-    sun.shadow.camera.right = 24
-    sun.shadow.camera.top = 24
-    sun.shadow.camera.bottom = -24
+    sun.shadow.camera.far = 60
+    sun.shadow.camera.left = -12
+    sun.shadow.camera.right = 12
+    sun.shadow.camera.top = 12
+    sun.shadow.camera.bottom = -12
     scene.add(hemi, sun)
 
     const world = new THREE.Group()
@@ -57,19 +58,18 @@ export function AppleCube({ apples, people, ugly }: { apples: number; people: nu
     const observer = new ResizeObserver(resize)
 
     function tick(time: number) {
-      const key = `${live.current.apples}|${live.current.people}|${live.current.ugly}`
+      const key = `${live.current.carried}|${live.current.goal}`
       if (key !== built) {
         disposeContents(world)
-        live.current.span = buildOrchard(world, live.current.apples, live.current.people, live.current.ugly)
-        scene.background = new THREE.Color(live.current.ugly ? 0xc5d0b4 : 0x8ec8ef)
+        live.current.span = buildCrate(world, live.current.carried, live.current.goal)
         built = key
         resize()
       }
       const seconds = time * 0.001
       world.traverse((obj) => {
-        if (obj.userData.bob) obj.position.y = obj.userData.baseY + Math.sin(seconds * 2 + obj.userData.phase) * 0.04
+        if (obj.userData.bob) obj.position.y = obj.userData.baseY + Math.sin(seconds * 2.2 + obj.userData.phase) * 0.025
       })
-      camera.lookAt(0, 0.4, 0.6)
+      camera.lookAt(0, 1.05, 0)
       renderer.render(scene, camera)
       frame = requestAnimationFrame(tick)
     }
@@ -82,159 +82,129 @@ export function AppleCube({ apples, people, ugly }: { apples: number; people: nu
       observer.disconnect()
       disposeContents(world)
       renderer.dispose()
-      renderer.domElement.remove()
+      node.removeChild(renderer.domElement)
     }
   }, [])
 
-  const tone = ugly ? 'El cubo está feo.' : 'El cubo está fresco.'
-  return <div className="airport" ref={host} role="img" aria-label={`${apples} manzanas y ${people} personas. ${tone}`} />
+  return <div ref={host} className="crate" role="img" aria-label={`${carried} de ${goal}`} />
 }
 
-function buildOrchard(world: THREE.Group, apples: number, people: number, ugly: boolean) {
-  const shownApples = Math.min(Math.max(0, apples), 64)
-  const shownPeople = Math.min(Math.max(0, people), 40)
-  const gap = 1.12
-  const side = Math.max(1, Math.ceil(Math.cbrt(Math.max(shownApples, 1))))
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 60), standard(ugly ? 0x6d7348 : 0x8a9a52, 0.95))
-  ground.rotation.x = -Math.PI / 2
-  ground.position.y = -0.02
-  ground.receiveShadow = true
-  world.add(ground)
-
-  const span = Math.max(1.6, side * gap)
-  const wood = standard(ugly ? 0x3a2e24 : 0xc4a06a, 0.84)
-  const pallet = new THREE.Mesh(new THREE.BoxGeometry(span + 0.7, 0.16, span + 0.7), wood)
-  pallet.position.y = 0.08
-  pallet.receiveShadow = true
-  pallet.castShadow = true
-  world.add(pallet)
-
-  if (shownApples === 0) emptyCrate(world, ugly)
-  else {
-    for (const [x, y, z] of cubeSpots(shownApples, gap)) {
-      const fruit = apple(ugly)
-      fruit.position.set(x, 0.42 + y, z)
-      world.add(fruit)
-    }
-  }
-  if (ugly) mold(world, span)
-
-  const cols = Math.max(1, Math.min(8, Math.ceil(Math.sqrt(Math.max(shownPeople, 1)))))
-  const front = span / 2 + 1.35
-  for (let index = 0; index < shownPeople; index += 1) {
-    const col = index % cols
-    const row = Math.floor(index / cols)
-    const figure = person(ugly ? 0x6d6458 : [0xff4d1c, 0xf4ecdf, 0x163a66, 0xf5c451, 0x1c1915][index % 5], ugly)
-    figure.scale.setScalar(0.78)
-    figure.position.set((col - (cols - 1) / 2) * 1.05, 0, front + row * 1.05)
-    figure.rotation.y = Math.PI / 4
-    if (ugly) figure.rotation.z = index % 2 === 0 ? 0.12 : -0.12
-    figure.userData.bob = true
-    figure.userData.baseY = 0
-    figure.userData.phase = index * 0.6
-    world.add(figure)
-  }
-
-  const rows = Math.ceil(shownPeople / cols)
-  const reach = Math.max(span, front + Math.max(0, rows - 1) * 1.05 + 1.4, cols * 0.55 + 2)
-  return Math.max(9, reach * 1.22)
+function stamp(goal: number): string {
+  return Math.round(goal).toLocaleString('en-US')
 }
 
-function cubeSpots(count: number, gap: number): Array<[number, number, number]> {
-  const side = Math.ceil(Math.cbrt(count))
-  const spots: Array<[number, number, number]> = []
-  for (let y = 0; y < side && spots.length < count; y += 1) {
-    for (let z = 0; z < side && spots.length < count; z += 1) {
-      for (let x = 0; x < side && spots.length < count; x += 1) {
-        spots.push([(x - (side - 1) / 2) * gap, y * gap, (z - (side - 1) / 2) * gap])
+function plaqueTexture(goal: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 220
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.fillStyle = '#c4a06a'
+    ctx.fillRect(0, 0, 512, 220)
+    ctx.strokeStyle = '#6e4e2c'
+    ctx.lineWidth = 18
+    ctx.strokeRect(14, 14, 484, 192)
+    ctx.fillStyle = '#2a2118'
+    ctx.font = '700 148px Impact, Arial Black, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const label = stamp(goal)
+    ctx.font = `700 ${label.length > 6 ? 112 : 148}px Impact, Arial Black, sans-serif`
+    ctx.fillText(label, 256, 118)
+  }
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function buildCrate(root: THREE.Group, carried: number, goal: number): number {
+  const fill = crateFill(carried, goal)
+  const wood = new THREE.MeshStandardMaterial({ color: 0xc4a06a, roughness: 0.82 })
+  const edge = new THREE.MeshStandardMaterial({ color: 0x8a6238, roughness: 0.7 })
+  const cash = new THREE.MeshStandardMaterial({ color: 0x1b8a46, roughness: 0.58 })
+  const band = new THREE.MeshStandardMaterial({ color: 0xe6d7a2, roughness: 0.45 })
+  const ink = new THREE.MeshStandardMaterial({ color: 0x143d22, roughness: 0.5 })
+
+  const W = 3.6
+  const D = 2.8
+  const H = 2.55
+  const t = 0.16
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat)
+    mesh.position.set(x, y, z)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    root.add(mesh)
+    return mesh
+  }
+
+  box(W + 0.08, t, D + 0.08, 0, t / 2, 0, wood)
+  box(t, H, D, -W / 2, t + H / 2, 0, wood)
+  box(t, H, D, W / 2, t + H / 2, 0, wood)
+  box(W, H, t, 0, t + H / 2, -D / 2, wood)
+  box(W, H * 0.22, t, 0, t + H * 0.11, D / 2, edge)
+
+  const plaque = new THREE.Mesh(
+    new THREE.PlaneGeometry(W * 0.72, H * 0.3),
+    new THREE.MeshBasicMaterial({ map: plaqueTexture(goal) }),
+  )
+  plaque.position.set(0, t + H * 0.2, D / 2 + 0.09)
+  root.add(plaque)
+
+  const innerW = W - t * 2 - 0.12
+  const innerD = D - t * 2 - 0.12
+  const innerH = H - 0.18
+  if (fill > 0) {
+    const moneyH = innerH * fill
+    const layers = Math.max(1, Math.round(10 * fill))
+    const slot = moneyH / layers
+    const stacks = 3
+    const gap = 0.08
+    const sw = (innerW - gap * (stacks - 1)) / stacks
+    for (let layer = 0; layer < layers; layer += 1) {
+      for (let stack = 0; stack < stacks; stack += 1) {
+        const y = t + slot * (layer + 0.5)
+        const x = -innerW / 2 + sw / 2 + stack * (sw + gap)
+        box(sw * 0.92, slot * 0.82, innerD * 0.9, x, y, 0, layer % 2 === 0 ? cash : ink)
+        if (layer === layers - 1) box(sw * 0.34, slot * 0.9, innerD * 0.92, x, y + slot * 0.08, 0, band)
       }
     }
   }
-  return spots
-}
 
-function apple(ugly: boolean) {
-  const group = new THREE.Group()
-  const body = new THREE.Mesh(
-    new THREE.SphereGeometry(0.42, 18, 14),
-    standard(ugly ? 0x6a5a28 : 0xc1121f, ugly ? 0.8 : 0.42),
+  if (goal > 0 && carried > goal) {
+    const extra = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.36), cash)
+    extra.position.set(-0.4, t + innerH + 0.16, 0.2)
+    extra.rotation.set(0.15, -0.5, 0.2)
+    extra.castShadow = true
+    root.add(extra)
+  }
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ color: 0x8a9148, roughness: 1 }),
   )
-  body.scale.set(1.05, 0.9, 1)
-  body.castShadow = true
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.2, 6), standard(0x5a3b24, 0.8))
-  stem.position.y = 0.4
-  const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), standard(ugly ? 0x6a7030 : 0x2f6b3a, 0.7))
-  leaf.scale.set(1.5, 0.32, 0.75)
-  leaf.position.set(0.12, 0.44, 0.02)
-  group.add(body, stem, leaf)
-  return group
-}
+  ground.rotation.x = -Math.PI / 2
+  ground.receiveShadow = true
+  root.add(ground)
 
-function emptyCrate(world: THREE.Group, ugly: boolean) {
-  const paint = standard(ugly ? 0x241c16 : 0xd7c4a3, 0.8)
-  const size = 2.2
-  const half = size / 2
-  for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as Array<[number, number]>) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.14, size, 0.14), paint)
-    post.position.set(x * half, size / 2 + 0.16, z * half)
-    post.castShadow = true
-    world.add(post)
-  }
-}
-
-function mold(world: THREE.Group, span: number) {
-  const goo = standard(0x31402c, 0.9)
-  for (const [x, z] of [[-0.35, 0.2], [0.4, -0.25], [0.05, 0.4]] as Array<[number, number]>) {
-    const blob = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), goo)
-    blob.scale.set(1.4, 0.4, 1)
-    blob.position.set(x * span, 0.22, z * span)
-    world.add(blob)
-  }
-}
-
-function person(shirt: number, ugly: boolean) {
-  const group = new THREE.Group()
-  const skin = standard(ugly ? 0xc2b29a : 0xf0c9a0, 0.72)
-  const cloth = standard(shirt, 0.78)
-  const ink = standard(ugly ? 0x2a241c : 0x1c1915, 0.8)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 12), skin)
-  head.position.y = 1.16
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.168, 12, 8), ink)
-  hair.scale.set(1.05, 0.55, 1.05)
-  hair.position.y = 1.25
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.4, 0.18), cloth)
-  torso.position.y = 0.82
-  const hips = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.18), ink)
-  hips.position.y = 0.54
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.4, 0.12), ink)
-  legL.position.set(-0.08, 0.26, 0)
-  const legR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.4, 0.12), ink)
-  legR.position.set(0.08, 0.26, 0)
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 0.1), cloth)
-  armL.position.set(-0.23, 0.84, 0)
-  const armR = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.34, 0.1), cloth)
-  armR.position.set(0.23, 0.84, 0)
-  group.add(head, hair, torso, hips, legL, legR, armL, armR)
-  group.traverse((obj) => {
-    const mesh = obj as THREE.Mesh
-    if (mesh.isMesh) mesh.castShadow = true
-  })
-  return group
-}
-
-function standard(color: number, rough: number) {
-  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.04 })
+  return 2.35
 }
 
 function disposeContents(group: THREE.Group) {
-  const nodes: THREE.Object3D[] = []
-  group.traverse((obj) => nodes.push(obj))
-  for (const obj of nodes) {
+  const materials = new Set<THREE.Material>()
+  const geometries = new Set<THREE.BufferGeometry>()
+  group.traverse((obj) => {
     const mesh = obj as THREE.Mesh
-    mesh.geometry?.dispose()
-    const material = mesh.material
-    if (Array.isArray(material)) material.forEach((item) => item.dispose())
-    else material?.dispose()
-  }
+    if (mesh.geometry) geometries.add(mesh.geometry)
+    const mat = mesh.material
+    if (Array.isArray(mat)) mat.forEach((item) => materials.add(item))
+    else if (mat) materials.add(mat)
+  })
+  geometries.forEach((item) => item.dispose())
+  materials.forEach((item) => {
+    const mapped = item as THREE.MeshStandardMaterial
+    if (mapped.map) mapped.map.dispose()
+    item.dispose()
+  })
   group.clear()
 }

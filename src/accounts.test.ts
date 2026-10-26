@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyType, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, withinDailyRisk, type FundAccount, type TakenOp } from "./accounts"
+import { applyType, crateFill, crateTotals, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, withinDailyRisk, type FundAccount, type TakenOp } from "./accounts"
 
 const topstep: FundAccount = {
   id: "a",
@@ -181,6 +181,17 @@ describe("cuentas de fondeo", () => {
     expect(marked.find((account) => account.id === "b")?.balance).toBe(50650)
     expect(marked.find((account) => account.id === "d")?.balance).toBe(50100)
     expect(marked.find((account) => account.id === "b")?.name).toBe("Copia")
+  })
+
+  it("la caja va a la mitad cuando la ganancia es la mitad de la meta", () => {
+    expect(crateFill(1500, 3000)).toBe(0.5)
+    expect(crateFill(3000, 3000)).toBe(1)
+    expect(crateFill(4500, 3000)).toBe(1)
+    expect(crateFill(0, 3000)).toBe(0)
+    expect(crateFill(-200, 3000)).toBe(0)
+    const account = { ...topstep, balance: 50000 }
+    const sessions = [{ date: "2026-10-26", operations: [{ result: "win" as const, accounts: ["a"], amounts: { a: 1500 } }] }]
+    expect(crateTotals([account], sessions)).toEqual({ carried: 1500, goal: 3000 })
   })
 
   it("un balance chico es la ganancia y entra en la escala de la cuenta", () => {
