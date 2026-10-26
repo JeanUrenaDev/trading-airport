@@ -65,7 +65,7 @@ export function App() {
       onSignOut={cloud ? () => void signOut() : visiting ? () => setGuest(false) : undefined}
       banner={
         visiting
-          ? 'Viendo el año de Jean. Solo lectura: días, reglas y cuentas.'
+          ? 'Consulta pública. Solo lectura.'
           : cloud
             ? undefined
             : 'Este año vive en este navegador. Con el proyecto de Supabase activo, la cuenta se lleva las fechas, las respuestas y los hitos.'
@@ -93,7 +93,7 @@ function Gate({
 
   async function run(action: 'in' | 'up') {
     if (!email.includes('@') || password.length < 6) {
-      setHint('Pon el correo y una contraseña de al menos 6 caracteres. La primera vez pulsa Crear cuenta, no Entrar.')
+      setHint('Indica el correo y una contraseña de al menos 6 caracteres. La primera vez usa Crear cuenta.')
       return
     }
     setHint('')
@@ -105,9 +105,9 @@ function Gate({
 
   return (
     <main className="gate">
-      <p className="kicker">Un año. Un hito por día limpio.</p>
-      <h1>GOKU</h1>
-      <p>La primera vez pulsa Crear cuenta. Entrar sirve cuando la cuenta ya existe.</p>
+      <p className="kicker">Trading Airport</p>
+      <h1>AIRPORT</h1>
+      <p>Accede con tu cuenta. Si todavía no tienes una, créala.</p>
       <label>
         Correo
         <input value={email} type="email" autoComplete="email" onChange={(event) => setEmail(event.target.value)} />
@@ -121,8 +121,8 @@ function Gate({
         <button type="button" className="solid" disabled={busy} onClick={() => void run('in')}>Entrar</button>
         <button type="button" className="ghost" disabled={busy} onClick={() => void run('up')}>Crear cuenta</button>
       </div>
-      <button type="button" className="ghost" disabled={busy} onClick={onGuest}>Ver como invitado</button>
-      <p className="fine">Miras el año de Jean: días, reglas y cuentas. No puedes cambiarlos.</p>
+      <button type="button" className="ghost" disabled={busy} onClick={onGuest}>Consulta pública</button>
+      <p className="fine">Registro publicado. Solo lectura.</p>
     </main>
   )
 }

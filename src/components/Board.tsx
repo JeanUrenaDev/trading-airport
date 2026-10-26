@@ -625,7 +625,7 @@ function DaySheet({
               </label>
             )}
             {error ? <p className="alert" role="alert">{error}</p> : null}
-            {locked ? <p className="fine">Solo lectura. Este día es de Jean.</p> : (
+            {locked ? <p className="fine">Consulta de solo lectura.</p> : (
               <button type="submit" className="solid" disabled={busy}>{busy ? 'Guardando…' : 'Guardar día'}</button>
             )}
           </div>
@@ -769,7 +769,7 @@ function Rules({
   return (
     <section className="panel">
       <h2>Reglas</h2>
-      <p className="fine">{locked ? 'Las reglas de Jean. Solo lectura.' : 'Las siete primeras se quedan. Puedes cambiar el texto. La de operar pasivo acepta No aplicaba.'}</p>
+      <p className="fine">{locked ? 'Reglas publicadas. Solo lectura.' : 'Las siete primeras se quedan. Puedes cambiar el texto. La de operar pasivo acepta No aplicaba.'}</p>
       {!locked && <div className="row add">
         <input value={text} maxLength={140} placeholder="Regla nueva" onChange={(event) => setText(event.target.value)} />
         <button
