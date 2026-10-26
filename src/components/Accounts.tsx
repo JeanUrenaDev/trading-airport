@@ -146,7 +146,7 @@ export function AccountsPanel({
     <section className="panel funds">
       <p className="kicker">Cuentas de fondeo</p>
       <h2>{book.accounts.length === 0 ? "Todavía no hay cuentas." : book.accounts.length === 1 ? "1 cuenta" : book.accounts.length + " cuentas"}</h2>
-      <p className="fine">El balance se pone una vez, el número completo. Después lo mueven las operaciones del calendario.</p>
+      <p className="fine">El balance se pone una vez, el número completo. Después lo mueve la plata de cada trade. Si una ficha no cuadra, cámbiala en Trades.</p>
 
       {book.accounts.length > 0 && <FundChart accounts={book.accounts} sessions={sessions} />}
 

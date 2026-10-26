@@ -36,6 +36,7 @@ import { unlockName } from '../unlocks'
 import type { PetStore } from '../store'
 import { dayCalls, judgeDay, money, opDollars, pickBook, readBook, withReplicas, writeBook, type AccountBook, type FundAccount } from '../accounts'
 import { AccountsPanel } from './Accounts'
+import { TradesPanel } from './Trades'
 import { Airport } from './Airport'
 import { AppleCube } from './AppleCube'
 
@@ -43,7 +44,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
   const [rules, setRules] = useState<RuleDef[]>([])
   const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [error, setError] = useState('')
-  const [tab, setTab] = useState<'ano' | 'numeros' | 'reglas' | 'cuentas'>('ano')
+  const [tab, setTab] = useState<'ano' | 'numeros' | 'reglas' | 'cuentas' | 'trades'>('ano')
   const [cursor, setCursor] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
@@ -163,6 +164,7 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
         <button type="button" className={tab === 'numeros' ? 'on' : ''} onClick={() => setTab('numeros')}>Números</button>
         <button type="button" className={tab === 'reglas' ? 'on' : ''} onClick={() => setTab('reglas')}>Reglas</button>
         <button type="button" className={tab === 'cuentas' ? 'on' : ''} onClick={() => setTab('cuentas')}>Cuentas</button>
+        <button type="button" className={tab === 'trades' ? 'on' : ''} onClick={() => setTab('trades')}>Trades</button>
       </nav>
 
       {tab === 'ano' && (
@@ -197,6 +199,20 @@ export function Board({ store, onSignOut, banner, readOnly = false }: { store: P
       )}
 
       {tab === 'cuentas' && <AccountsPanel book={book} sessions={sessions} locked={readOnly} onSave={(next) => void commitBook(next)} />}
+      {tab === 'trades' && (
+        <TradesPanel
+          sessions={sessions}
+          accounts={book.accounts}
+          locked={readOnly}
+          onOpen={(date) => {
+            setTab('ano')
+            setSelected(date)
+          }}
+          onSave={async (session) => {
+            await persist({ ...session, book })
+          }}
+        />
+      )}
 
       {selected && (
         <DaySheet

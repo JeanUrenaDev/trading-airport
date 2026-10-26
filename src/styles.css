@@ -282,3 +282,22 @@ legend { padding: 0 6px; }
   border-color: transparent;
   font-weight: 600;
 }
+
+.trade-list { display: grid; gap: 12px; }
+.trade-card { border: 3px solid var(--ink); background: #fffaf3; padding: 12px; display: grid; gap: 10px; }
+.trade-card header { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.trade-card header strong { display: block; }
+.trade-lines { display: grid; gap: 8px; }
+.trade-line { display: flex; align-items: center; gap: 8px; }
+.trade-line span { flex: 1; min-width: 0; }
+.trade-line em { color: #5c564c; font-style: normal; margin-left: 6px; }
+.trade-line input.cash {
+  width: 7.2rem;
+  flex: 0 0 7.2rem;
+  background: #fffaf3;
+  color: #12100e;
+  border: 2px solid #12100e;
+  padding: 8px 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

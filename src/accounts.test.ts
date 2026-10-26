@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyType, dayCalls, judgeDay, openingBalance, opDollars, runningBalance, shareBalance, snapshot, typesOf, type FundAccount } from "./accounts"
+import { applyType, dayCalls, judgeDay, openingBalance, opDollars, patchOpAmounts, runningBalance, shareBalance, snapshot, typesOf, type FundAccount, type TakenOp } from "./accounts"
 
 const topstep: FundAccount = {
   id: "a",
@@ -134,6 +134,26 @@ describe("cuentas de fondeo", () => {
     expect(opDollars(lead, mixed, book)).toBe(900)
     expect(opDollars(copy, mixed, book)).toBe(900)
     expect(opDollars(alone, mixed, book)).toBe(-500)
+  })
+
+  it("editar la plata de una copia no mueve a la cuenta origen", () => {
+    const lead: FundAccount = { ...topstep, balance: 50000 }
+    const copy: FundAccount = { ...topstep, id: "b", name: "Copia", balance: 50000, replicaOf: "a" }
+    const book = [lead, copy]
+    const op: TakenOp & { learned: string } = { result: "win", learned: "nivel", accounts: ["a"], amounts: { a: 2246 }, reward: 3, pnl: 2246 }
+    const same = patchOpAmounts(op, { a: 2246, b: 2246 })
+    const sessions = [{ date: "2026-10-25", operations: [same] }]
+    expect(same.learned).toBe("nivel")
+    expect(same.pnl).toBeUndefined()
+    expect(runningBalance(lead, book, sessions).at(-1)?.balance).toBe(52246)
+    expect(runningBalance(copy, book, sessions).at(-1)?.balance).toBe(52246)
+    const fixed = patchOpAmounts(same, { b: 100 })
+    const next = [{ date: "2026-10-25", operations: [fixed] }]
+    expect(opDollars(lead, fixed, book)).toBe(2246)
+    expect(opDollars(copy, fixed, book)).toBe(100)
+    expect(runningBalance(lead, book, next).at(-1)?.balance).toBe(52246)
+    expect(runningBalance(copy, book, next).at(-1)?.balance).toBe(50100)
+    expect(patchOpAmounts(op, { b: Number.NaN })).toEqual(op)
   })
 
   it("el balance solo se copia a las cuentas que marcas", () => {

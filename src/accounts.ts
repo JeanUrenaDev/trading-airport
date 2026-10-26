@@ -217,6 +217,21 @@ function readCash(value: number | undefined): number | undefined {
   return Math.round(value * 100) / 100
 }
 
+export function patchOpAmounts<T extends TakenOp>(op: T, amounts: Record<string, number>): T {
+  const nextAmounts: Record<string, number> = { ...(op.amounts ?? {}) }
+  const ids = [...(op.accounts ?? [])]
+  let wrote = false
+  for (const [id, value] of Object.entries(amounts)) {
+    const clean = readCash(value)
+    if (clean == null) continue
+    nextAmounts[id] = clean
+    if (!ids.includes(id)) ids.push(id)
+    wrote = true
+  }
+  if (!wrote) return op
+  return { ...op, accounts: ids, amounts: nextAmounts, pnl: undefined }
+}
+
 export function opDollars(account: FundAccount, op: TakenOp, book: FundAccount[] = []): number {
   if (op.result !== "win" && op.result !== "loss") return 0
   if (op.amounts) {
