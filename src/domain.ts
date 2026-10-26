@@ -275,7 +275,7 @@ export function normalizeStake(value: number | undefined, fallback = 1) {
 }
 
 export function cleanPnl(value: number | undefined): number | undefined {
-  if (value == null || !Number.isFinite(value) || value < 0) return undefined
+  if (value == null || !Number.isFinite(value)) return undefined
   return Math.round(value * 100) / 100
 }
 

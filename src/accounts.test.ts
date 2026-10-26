@@ -117,7 +117,7 @@ describe("cuentas de fondeo", () => {
     const copy: FundAccount = { ...topstep, id: "b", name: "Copia", risk: 800, balance: 50000, replicaOf: "a" }
     const alone: FundAccount = { ...topstep, id: "c", name: "Sola", risk: 300, balance: 50000 }
     const book = [lead, copy, alone]
-    const op = { result: "loss" as const, accounts: ["a", "c"], amounts: { a: 500, c: 200 } }
+    const op = { result: "loss" as const, accounts: ["a", "c"], amounts: { a: -500, c: -200 } }
     expect(opDollars(lead, op, book)).toBe(-500)
     expect(opDollars(copy, op, book)).toBe(-500)
     expect(opDollars(alone, op, book)).toBe(-200)
@@ -130,6 +130,10 @@ describe("cuentas de fondeo", () => {
     expect(calls.find((call) => call.accountId === "b")?.lost).toBe(500)
     expect(calls.find((call) => call.accountId === "b")?.good).toBe(true)
     expect(calls.find((call) => call.accountId === "c")?.lost).toBe(200)
+    const mixed = { result: "win" as const, accounts: ["a", "c"], amounts: { a: 900, c: -500 } }
+    expect(opDollars(lead, mixed, book)).toBe(900)
+    expect(opDollars(copy, mixed, book)).toBe(900)
+    expect(opDollars(alone, mixed, book)).toBe(-500)
   })
 
   it("el balance solo se copia a las cuentas que marcas", () => {

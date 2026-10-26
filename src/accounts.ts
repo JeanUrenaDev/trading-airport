@@ -213,7 +213,7 @@ function stake(value: number | undefined, fallback: number): number {
 }
 
 function readCash(value: number | undefined): number | undefined {
-  if (value == null || !Number.isFinite(value) || value < 0) return undefined
+  if (value == null || !Number.isFinite(value)) return undefined
   return Math.round(value * 100) / 100
 }
 
@@ -225,7 +225,7 @@ export function opDollars(account: FundAccount, op: TakenOp, book: FundAccount[]
       .map((id) => readCash(op.amounts?.[id]))
       .find((value) => value != null)
     if (shared == null) return 0
-    return op.result === "win" ? shared : -shared
+    return shared
   }
   if (op.pnl != null && Number.isFinite(op.pnl) && op.pnl >= 0) {
     const amount = Math.round(op.pnl * 100) / 100

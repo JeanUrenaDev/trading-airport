@@ -338,8 +338,8 @@ function withAmounts(op: TradeOp, book: FundAccount[], saved?: TradeOp, previous
     const account = book.find((item) => item.id === id)
     if (!account) continue
     const current = op.amounts?.[id]
-    const previousPlan = previous === 'win' ? account.risk * 3 : previous === 'loss' ? account.risk : undefined
-    const planned = op.result === 'win' ? account.risk * 3 : account.risk
+    const previousPlan = previous === 'win' ? account.risk * 3 : previous === 'loss' ? -account.risk : undefined
+    const planned = op.result === 'win' ? account.risk * 3 : -account.risk
     if (current != null && Number.isFinite(current) && current !== previousPlan) next[id] = current
     else if (account.risk > 0) next[id] = planned
     else if (current != null && Number.isFinite(current)) next[id] = current
@@ -358,7 +358,7 @@ function settleOp(op: TradeOp, book: FundAccount[]): TradeOp {
   const first = book.find((item) => amounts[item.id] != null && item.risk > 0)
     ?? book.find((item) => (op.accounts ?? []).includes(item.id) && item.risk > 0)
   const cash = first ? (amounts[first.id] ?? pnl) : pnl
-  const units = cash != null && first ? stakeFromPnl(cash, first.risk) : undefined
+  const units = cash != null && first ? stakeFromPnl(Math.abs(cash), first.risk) : undefined
   return {
     ...op,
     amounts: hasAmounts ? amounts : undefined,
@@ -372,7 +372,7 @@ function pnlLine(op: TradeOp, book: FundAccount[]): string {
   const first = book.find((item) => (op.accounts ?? []).includes(item.id))
   const cash = first ? cleanPnl(op.amounts?.[first.id]) ?? cleanPnl(op.pnl) : undefined
   const units = cash != null && first && first.risk > 0
-    ? stakeFromPnl(cash, first.risk)
+    ? stakeFromPnl(Math.abs(cash), first.risk)
     : op.result === 'win'
       ? normalizeStake(op.reward, 3)
       : normalizeStake(op.risk)
@@ -421,6 +421,7 @@ function DaySheet({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [cashDraft, setCashDraft] = useState<Record<string, string>>({})
   const current = ops[Math.min(active, ops.length - 1)]
   const clean = operationsPass(ops)
   const leaders = accounts.filter((account) => !account.replicaOf || !accounts.some((item) => item.id === account.replicaOf))
@@ -543,7 +544,7 @@ function DaySheet({
                   <legend>Resultado de esta operación</legend>
                   <div className="choice">
                     {(['win', 'loss', 'breakeven'] as Result[]).map((item) => (
-                      <button key={item} type="button" className={current.result === item ? 'on' : ''} onClick={() => update(withAmounts({ ...current, result: item }, accounts, existing?.operations?.[active], current.result))}>
+                      <button key={item} type="button" className={current.result === item ? 'on' : ''} onClick={() => { setCashDraft({}); update(withAmounts({ ...current, result: item }, accounts, existing?.operations?.[active], current.result)) }}>
                         {RESULT_LABEL[item]}
                       </button>
                     ))}
@@ -603,6 +604,7 @@ function DaySheet({
                           onClick={() => {
                             const ids = leaders.map((account) => account.id)
                             const all = ids.every((id) => (current.accounts ?? []).includes(id))
+                            setCashDraft({})
                             update(withAmounts({ ...current, accounts: all ? [] : ids }, accounts, existing?.operations?.[active]))
                           }}
                         >Todas</button>
@@ -625,26 +627,37 @@ function DaySheet({
                                     const selected = new Set(current.accounts ?? [])
                                     if (selected.has(account.id)) selected.delete(account.id)
                                     else selected.add(account.id)
+                                    setCashDraft({})
                                     update(withAmounts({ ...current, accounts: [...selected] }, accounts, existing?.operations?.[active]))
                                   }}
                                 />
                                 {account.name}
                                 {follows && source ? <span className="fine"> entra con {source.name}</span> : leader ? <span className="fine"> réplica de {leader.name}</span> : null}
                               </label>
-                              {explicit && (current.result === 'win' || current.result === 'loss') && (
+                              {!follows && (current.result === 'win' || current.result === 'loss') && (
                                 <input
                                   className="cash"
                                   type="number"
-                                  min={0}
                                   step={0.01}
-                                  aria-label={(current.result === 'win' ? 'Ganancia de ' : 'Pérdida de ') + account.name}
-                                  value={current.amounts?.[account.id] ?? ''}
+                                  inputMode="decimal"
+                                  aria-label={'Plata de ' + account.name}
+                                  value={cashDraft[active + ':' + account.id] ?? (current.amounts?.[account.id] ?? '')}
                                   onChange={(event) => {
                                     const raw = event.target.value
+                                    if (raw !== '' && !/^-?\d*\.?\d*$/.test(raw)) return
+                                    const key = active + ':' + account.id
+                                    setCashDraft((prev) => ({ ...prev, [key]: raw }))
                                     const amounts = { ...(current.amounts ?? {}) }
-                                    if (raw === '') delete amounts[account.id]
-                                    else amounts[account.id] = Number(raw)
-                                    update({ ...current, amounts, pnl: undefined })
+                                    const selected = new Set(current.accounts ?? [])
+                                    const next = Number(raw)
+                                    if (raw === '' || !Number.isFinite(next)) {
+                                      delete amounts[account.id]
+                                      if (raw === '') selected.delete(account.id)
+                                    } else {
+                                      amounts[account.id] = next
+                                      selected.add(account.id)
+                                    }
+                                    update({ ...current, accounts: [...selected], amounts, pnl: undefined })
                                   }}
                                 />
                               )}

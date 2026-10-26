@@ -36,6 +36,7 @@ code, pre { font-family: "Cascadia Code", Consolas, monospace; }
 .count { font-size: clamp(4rem, 10vw, 7rem); line-height: 0.8; }
 .count span { color: var(--muted); font-size: 0.42em; }
 .fine { color: var(--muted); }
+.sheet .fine { color: #3d3832; }
 .alert { color: #ffb4a2; }
 .banner { border: 3px solid var(--gold); padding: 10px 12px; margin-top: 12px; }
 
@@ -256,4 +257,11 @@ legend { padding: 0 6px; }
 .fund-picks label, .fund-row { display: flex; align-items: center; gap: 8px; }
 .fund-picks input { width: auto; }
 .fund-row label { flex: 1; }
-.fund-picks input.cash { width: 7.5rem; }
+.fund-picks input.cash {
+  width: 7.5rem;
+  background: #fffaf3;
+  color: #12100e;
+  color-scheme: light;
+  border: 2px solid #12100e;
+  padding: 8px 10px;
+}
