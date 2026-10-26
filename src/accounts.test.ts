@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { applyType, dayCalls, judgeDay, openingBalance, runningBalance, shareBalance, snapshot, typesOf, type FundAccount } from "./accounts"
+import { applyType, dayCalls, judgeDay, openingBalance, opDollars, runningBalance, shareBalance, snapshot, typesOf, type FundAccount } from "./accounts"
 
 const topstep: FundAccount = {
   id: "a",
@@ -97,6 +97,39 @@ describe("cuentas de fondeo", () => {
     expect(calls.find((call) => call.accountId === "a")?.lost).toBe(600)
     expect(calls.find((call) => call.accountId === "a")?.good).toBe(false)
     expect(calls.find((call) => call.accountId === "c")).toBeUndefined()
+  })
+
+  it("la plata escrita manda sobre el ratio", () => {
+    const account = { ...topstep, risk: 400 }
+    expect(opDollars(account, { result: "win", pnl: 250, reward: 3, risk: 1 })).toBe(250)
+    expect(opDollars(account, { result: "loss", pnl: 700 })).toBe(-700)
+    expect(opDollars(account, { result: "win", reward: 3, risk: 1 })).toBe(1200)
+    expect(opDollars(account, { result: "breakeven", pnl: 100 })).toBe(0)
+    const sessions = [{ date: "2026-10-25", operations: [{ result: "loss" as const, pnl: 700, accounts: ["a"] }] }]
+    expect(runningBalance({ ...account, balance: 50000 }, [account], sessions).at(-1)?.balance).toBe(49300)
+    const calls = dayCalls([account], [{ result: "loss", pnl: 700, accounts: ["a"] }])
+    expect(calls[0].lost).toBe(700)
+    expect(calls[0].good).toBe(false)
+  })
+
+  it("cada cuenta tiene su plata y la copia usa la de su origen", () => {
+    const lead: FundAccount = { ...topstep, risk: 400, balance: 50000 }
+    const copy: FundAccount = { ...topstep, id: "b", name: "Copia", risk: 800, balance: 50000, replicaOf: "a" }
+    const alone: FundAccount = { ...topstep, id: "c", name: "Sola", risk: 300, balance: 50000 }
+    const book = [lead, copy, alone]
+    const op = { result: "loss" as const, accounts: ["a", "c"], amounts: { a: 500, c: 200 } }
+    expect(opDollars(lead, op, book)).toBe(-500)
+    expect(opDollars(copy, op, book)).toBe(-500)
+    expect(opDollars(alone, op, book)).toBe(-200)
+    const sessions = [{ date: "2026-10-25", operations: [op] }]
+    expect(runningBalance(lead, book, sessions).at(-1)?.balance).toBe(49500)
+    expect(runningBalance(copy, book, sessions).at(-1)?.balance).toBe(49500)
+    expect(runningBalance(alone, book, sessions).at(-1)?.balance).toBe(49800)
+    const calls = dayCalls(book, [op])
+    expect(calls.find((call) => call.accountId === "a")?.good).toBe(false)
+    expect(calls.find((call) => call.accountId === "b")?.lost).toBe(500)
+    expect(calls.find((call) => call.accountId === "b")?.good).toBe(true)
+    expect(calls.find((call) => call.accountId === "c")?.lost).toBe(200)
   })
 
   it("el balance solo se copia a las cuentas que marcas", () => {

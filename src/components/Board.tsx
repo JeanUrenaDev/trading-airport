@@ -13,8 +13,10 @@ import {
   monthLabel,
   monthMatrix,
   monthStats,
+  cleanPnl,
   normalizeStake,
   orchard,
+  stakeFromPnl,
   resultCurve,
   orderedDisciplined,
   parseKey,
@@ -309,6 +311,78 @@ function blankTrade(rules: RuleDef[]): TradeOp {
   return { answers: blankAnswers(rules), result: null, learned: '', analysis: '', risk: 1, reward: 3 }
 }
 
+function sameAccounts(left?: string[], right?: string[]): boolean {
+  return [...(left ?? [])].sort().join() === [...(right ?? [])].sort().join()
+}
+
+function keptLegacy(op: TradeOp, saved?: TradeOp): boolean {
+  if (!saved || saved.result !== op.result) return false
+  if (saved.pnl != null || saved.amounts) return false
+  if (op.pnl != null || (op.amounts && Object.keys(op.amounts).length > 0)) return false
+  return sameAccounts(saved.accounts, op.accounts)
+}
+
+function missingPnl(op: TradeOp, saved?: TradeOp): boolean {
+  if (op.result !== 'win' && op.result !== 'loss') return false
+  const ids = op.accounts ?? []
+  if (ids.length === 0 || keptLegacy(op, saved)) return false
+  if ((!op.amounts || Object.keys(op.amounts).length === 0) && cleanPnl(op.pnl) != null) return false
+  return ids.some((id) => cleanPnl(op.amounts?.[id]) == null)
+}
+
+function withAmounts(op: TradeOp, book: FundAccount[], saved?: TradeOp, previous?: Result | null): TradeOp {
+  if (op.result !== 'win' && op.result !== 'loss') return op
+  if (keptLegacy(op, saved)) return op
+  const next: Record<string, number> = {}
+  for (const id of op.accounts ?? []) {
+    const account = book.find((item) => item.id === id)
+    if (!account) continue
+    const current = op.amounts?.[id]
+    const previousPlan = previous === 'win' ? account.risk * 3 : previous === 'loss' ? account.risk : undefined
+    const planned = op.result === 'win' ? account.risk * 3 : account.risk
+    if (current != null && Number.isFinite(current) && current !== previousPlan) next[id] = current
+    else if (account.risk > 0) next[id] = planned
+    else if (current != null && Number.isFinite(current)) next[id] = current
+  }
+  return { ...op, amounts: next, pnl: undefined }
+}
+
+function settleOp(op: TradeOp, book: FundAccount[]): TradeOp {
+  const amounts: Record<string, number> = {}
+  for (const id of op.accounts ?? []) {
+    const value = cleanPnl(op.amounts?.[id])
+    if (value != null) amounts[id] = value
+  }
+  const hasAmounts = Object.keys(amounts).length > 0
+  const pnl = hasAmounts || (op.result !== 'win' && op.result !== 'loss') ? undefined : cleanPnl(op.pnl)
+  const first = book.find((item) => amounts[item.id] != null && item.risk > 0)
+    ?? book.find((item) => (op.accounts ?? []).includes(item.id) && item.risk > 0)
+  const cash = first ? (amounts[first.id] ?? pnl) : pnl
+  const units = cash != null && first ? stakeFromPnl(cash, first.risk) : undefined
+  return {
+    ...op,
+    amounts: hasAmounts ? amounts : undefined,
+    pnl,
+    risk: op.result === 'loss' && units != null ? units : normalizeStake(op.risk),
+    reward: op.result === 'win' && units != null ? units : normalizeStake(op.reward, 3),
+  }
+}
+
+function pnlLine(op: TradeOp, book: FundAccount[]): string {
+  const first = book.find((item) => (op.accounts ?? []).includes(item.id))
+  const cash = first ? cleanPnl(op.amounts?.[first.id]) ?? cleanPnl(op.pnl) : undefined
+  const units = cash != null && first && first.risk > 0
+    ? stakeFromPnl(cash, first.risk)
+    : op.result === 'win'
+      ? normalizeStake(op.reward, 3)
+      : normalizeStake(op.risk)
+  const cosas = `${units} ${units === 1 ? 'manzana' : 'manzanas'} y ${units} ${units === 1 ? 'persona' : 'personas'}`
+  const quien = first ? ` El cubo usa ${first.name}.` : ''
+  if (units === 0) return `No mueve el cubo.${quien}`
+  if (op.result === 'win') return `Sumas ${cosas}.${quien}`
+  return `Quitas ${cosas}. Si no alcanzan, el cubo se pone feo.${quien}`
+}
+
 function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): TradeOp[] {
   if (existing?.operations && existing.operations.length > 0) {
     return existing.operations.slice(0, 3).map((op) => ({ ...op, risk: op.risk ?? 1, reward: op.reward ?? 1 }))
@@ -399,6 +473,10 @@ function DaySheet({
             setError('Cada operación necesita ganancia, pérdida o tablas.')
             return
           }
+          if (ops.some((op, index) => missingPnl(op, existing?.operations?.[index]))) {
+            setError('Escribe cuánto ganaste o perdiste en cada operación.')
+            return
+          }
           void save({
             date: dateKey,
             status: 'completed',
@@ -406,7 +484,7 @@ function DaySheet({
             learned: ops.map((op) => op.learned).filter(Boolean).join(' · '),
             note,
             answers: ops[0].answers,
-            operations: ops.map((op) => ({ ...op, risk: normalizeStake(op.risk), reward: normalizeStake(op.reward, 3) })),
+            operations: ops.map((op) => settleOp(op, accounts)),
             disciplined: operationsPass(ops) && breaches.length === 0,
           })
         }}
@@ -465,44 +543,12 @@ function DaySheet({
                   <legend>Resultado de esta operación</legend>
                   <div className="choice">
                     {(['win', 'loss', 'breakeven'] as Result[]).map((item) => (
-                      <button key={item} type="button" className={current.result === item ? 'on' : ''} onClick={() => update({ ...current, result: item })}>
+                      <button key={item} type="button" className={current.result === item ? 'on' : ''} onClick={() => update(withAmounts({ ...current, result: item }, accounts, existing?.operations?.[active], current.result))}>
                         {RESULT_LABEL[item]}
                       </button>
                     ))}
                   </div>
                 </fieldset>
-                {(current.result === 'win' || current.result === 'loss') && (
-                  <fieldset>
-                    <legend>Ratio de esta operación</legend>
-                    <div className="choice ratio">
-                      <label>
-                        Arriesgo
-                        <input
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={current.risk ?? 1}
-                          onChange={(event) => update({ ...current, risk: Number(event.target.value) })}
-                        />
-                      </label>
-                      <label>
-                        Si gano
-                        <input
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={current.reward ?? 3}
-                          onChange={(event) => update({ ...current, reward: Number(event.target.value) })}
-                        />
-                      </label>
-                    </div>
-                    <p className="fine">
-                      {current.result === 'win'
-                        ? `Sumas ${normalizeStake(current.reward, 3)} manzanas y ${normalizeStake(current.reward, 3)} personas.`
-                        : `Quitas ${normalizeStake(current.risk)} manzana y ${normalizeStake(current.risk)} persona. Si no alcanzan, el cubo se pone feo.`}
-                    </p>
-                  </fieldset>
-                )}
                 <label>
                   ¿Qué aprendí en esta operación?
                   <textarea value={current.learned} rows={3} maxLength={500} onChange={(event) => update({ ...current, learned: event.target.value })} />
@@ -557,7 +603,7 @@ function DaySheet({
                           onClick={() => {
                             const ids = leaders.map((account) => account.id)
                             const all = ids.every((id) => (current.accounts ?? []).includes(id))
-                            update({ ...current, accounts: all ? [] : ids })
+                            update(withAmounts({ ...current, accounts: all ? [] : ids }, accounts, existing?.operations?.[active]))
                           }}
                         >Todas</button>
                       </div>
@@ -569,34 +615,53 @@ function DaySheet({
                           const follows = on && !explicit
                           const source = accounts.find((item) => item.id !== account.id && (current.accounts ?? []).includes(item.id) && withReplicas([item.id], accounts).includes(account.id))
                           return (
-                            <label key={account.id}>
-                              <input
-                                type="checkbox"
-                                checked={on}
-                                disabled={follows}
-                                onChange={() => {
-                                  const selected = new Set(current.accounts ?? [])
-                                  if (selected.has(account.id)) selected.delete(account.id)
-                                  else selected.add(account.id)
-                                  update({ ...current, accounts: [...selected] })
-                                }}
-                              />
-                              {account.name}
-                              {follows && source ? <span className="fine"> entra con {source.name}</span> : leader ? <span className="fine"> réplica de {leader.name}</span> : null}
-                            </label>
+                            <div key={account.id} className="fund-row">
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  disabled={follows}
+                                  onChange={() => {
+                                    const selected = new Set(current.accounts ?? [])
+                                    if (selected.has(account.id)) selected.delete(account.id)
+                                    else selected.add(account.id)
+                                    update(withAmounts({ ...current, accounts: [...selected] }, accounts, existing?.operations?.[active]))
+                                  }}
+                                />
+                                {account.name}
+                                {follows && source ? <span className="fine"> entra con {source.name}</span> : leader ? <span className="fine"> réplica de {leader.name}</span> : null}
+                              </label>
+                              {explicit && (current.result === 'win' || current.result === 'loss') && (
+                                <input
+                                  className="cash"
+                                  type="number"
+                                  min={0}
+                                  step={0.01}
+                                  aria-label={(current.result === 'win' ? 'Ganancia de ' : 'Pérdida de ') + account.name}
+                                  value={current.amounts?.[account.id] ?? ''}
+                                  onChange={(event) => {
+                                    const raw = event.target.value
+                                    const amounts = { ...(current.amounts ?? {}) }
+                                    if (raw === '') delete amounts[account.id]
+                                    else amounts[account.id] = Number(raw)
+                                    update({ ...current, amounts, pnl: undefined })
+                                  }}
+                                />
+                              )}
+                            </div>
                           )
                         })}
                       </div>
                       <p className="fine">
                         {withReplicas(current.accounts ?? [], accounts).length === 0
-                          ? "Marca la cuenta. Puedes tomar la misma operación en todas. Una pérdida resta el riesgo y una ganancia lo multiplica por el ratio."
+                          ? "Marca la cuenta. Cada una lleva su plata. Una copia usa la misma que la cuenta que sigue."
                           : (current.result === "win" || current.result === "loss")
                             ? withReplicas(current.accounts ?? [], accounts).map((id) => {
                                 const account = accounts.find((item) => item.id === id)
                                 if (!account) return ""
-                                const move = opDollars(account, current)
+                                const move = opDollars(account, current, accounts)
                                 return account.name + " " + (move > 0 ? "+" : "") + money(move)
-                              }).filter(Boolean).join(" · ")
+                              }).filter(Boolean).join(" · ") + " " + pnlLine(current, accounts)
                             : "La misma operación entra en la cuenta marcada y en todo el grupo que replica."}
                       </p>
                     </>
@@ -669,7 +734,7 @@ function Curve({ points }: { points: ReturnType<typeof resultCurve> }) {
         <h3>La gráfica</h3>
         <strong>{now}</strong>
       </div>
-      <p className="fine">Un ratio 1-3 sube 3 al ganar y baja 1 al perder. Una tabla no se mueve. El dinero no entra.</p>
+      <p className="fine">Si escribiste la plata, el cubo la parte por el riesgo de la cuenta. Si no, ganar suma 3 y perder resta 1. Una tabla no se mueve.</p>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Curva de ganancias y pérdidas. Ahora ${now}.`}>
         <line className="zero" x1={padX} x2={width - padX} y1={yAt(0)} y2={yAt(0)} />
         <path d={line} />

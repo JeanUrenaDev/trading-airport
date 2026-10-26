@@ -41,6 +41,8 @@ export interface TradeOp {
   analysis?: string
   risk?: number
   reward?: number
+  pnl?: number
+  amounts?: Record<string, number>
   accounts?: string[]
 }
 
@@ -269,7 +271,17 @@ export interface CurvePoint {
 
 export function normalizeStake(value: number | undefined, fallback = 1) {
   if (value == null || !Number.isFinite(value)) return fallback
-  return Math.min(20, Math.max(1, Math.round(value)))
+  return Math.min(20, Math.max(0, Math.round(value)))
+}
+
+export function cleanPnl(value: number | undefined): number | undefined {
+  if (value == null || !Number.isFinite(value) || value < 0) return undefined
+  return Math.round(value * 100) / 100
+}
+
+export function stakeFromPnl(pnl: number, accountRisk: number): number {
+  if (!Number.isFinite(pnl) || pnl <= 0 || !Number.isFinite(accountRisk) || accountRisk <= 0) return 0
+  return normalizeStake(Math.max(1, Math.round(pnl / accountRisk)))
 }
 
 export function resultCurve(sessions: SessionRecord[]): CurvePoint[] {
@@ -286,7 +298,7 @@ export function resultCurve(sessions: SessionRecord[]): CurvePoint[] {
       if (!result) continue
       const risk = normalizeStake(stake.risk)
       const reward = normalizeStake(stake.reward)
-      const step = result === 'win' ? reward : result === 'loss' ? -risk : 0
+      const step = result === 'win' ? reward : result === 'loss' ? -risk || 0 : 0
       cumulative += step
       points.push({ date: session.date, result, step, cumulative, disciplined: session.disciplined, risk, reward })
     }
@@ -305,7 +317,7 @@ export function dayMark(session: SessionRecord): { net: number; letter: 'c' | 'n
     if (!result) continue
     const risk = normalizeStake(stake.risk)
     const reward = normalizeStake(stake.reward)
-    net += result === 'win' ? reward : result === 'loss' ? -risk : 0
+    net += result === 'win' ? reward : result === 'loss' ? -risk || 0 : 0
   }
   return { net, letter: session.disciplined ? 'c' : 'n' }
 }

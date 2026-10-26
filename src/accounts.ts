@@ -197,6 +197,8 @@ export interface TakenOp {
   result: "win" | "loss" | "breakeven" | null
   risk?: number
   reward?: number
+  pnl?: number
+  amounts?: Record<string, number>
   accounts?: string[]
 }
 
@@ -210,10 +212,27 @@ function stake(value: number | undefined, fallback: number): number {
   return Math.min(20, Math.max(1, Math.round(value)))
 }
 
-export function opDollars(account: FundAccount, op: TakenOp): number {
+function readCash(value: number | undefined): number | undefined {
+  if (value == null || !Number.isFinite(value) || value < 0) return undefined
+  return Math.round(value * 100) / 100
+}
+
+export function opDollars(account: FundAccount, op: TakenOp, book: FundAccount[] = []): number {
+  if (op.result !== "win" && op.result !== "loss") return 0
+  if (op.amounts) {
+    const own = readCash(op.amounts[account.id])
+    const shared = own ?? replicaGroup(account.id, book.length > 0 ? book : [account])
+      .map((id) => readCash(op.amounts?.[id]))
+      .find((value) => value != null)
+    if (shared == null) return 0
+    return op.result === "win" ? shared : -shared
+  }
+  if (op.pnl != null && Number.isFinite(op.pnl) && op.pnl >= 0) {
+    const amount = Math.round(op.pnl * 100) / 100
+    return op.result === "win" ? amount : -amount
+  }
   if (op.result === "win") return account.risk * stake(op.reward, 3)
-  if (op.result === "loss") return -(account.risk * stake(op.risk, 1))
-  return 0
+  return -(account.risk * stake(op.risk, 1))
 }
 
 export function replicaGroup(id: string, accounts: FundAccount[]): string[] {
@@ -267,7 +286,7 @@ export function runningBalance(account: FundAccount, accounts: FundAccount[], se
     for (const op of day.operations ?? []) {
       if (!op.result || op.result === "breakeven") continue
       if (!withReplicas(op.accounts ?? [], accounts).includes(account.id)) continue
-      balance += opDollars(account, op)
+      balance += opDollars(account, op, accounts)
       moved = true
     }
     if (moved) points.push({ date: day.date, balance })
@@ -285,7 +304,7 @@ export function dayCalls(accounts: FundAccount[], ops: TakenOp[]): RiskCall[] {
       if (!op.result || op.result === "breakeven") continue
       if (!withReplicas(op.accounts ?? [], accounts).includes(account.id)) continue
       touched = true
-      const move = opDollars(account, op)
+      const move = opDollars(account, op, accounts)
       delta += move
       if (move < 0) lost += -move
     }

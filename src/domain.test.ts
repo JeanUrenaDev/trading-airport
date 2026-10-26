@@ -7,6 +7,7 @@ import {
   monthMatrix,
   monthStats,
   orchard,
+  stakeFromPnl,
   dayMark,
   resultCurve,
   orderedDisciplined,
@@ -163,6 +164,21 @@ describe('cubo', () => {
     ]
     expect(resultCurve(sessions).map((point) => point.cumulative)).toEqual([3, 2])
     expect(orchard(sessions)).toEqual({ apples: 2, people: 2, ugly: false })
+  })
+
+  it('parte la plata por el riesgo de la cuenta', () => {
+    expect(stakeFromPnl(1200, 400)).toBe(3)
+    expect(stakeFromPnl(600, 400)).toBe(2)
+    expect(stakeFromPnl(50, 400)).toBe(1)
+    expect(stakeFromPnl(0, 400)).toBe(0)
+    expect(stakeFromPnl(100000, 400)).toBe(20)
+  })
+
+  it('una perdida de cero no mueve el cubo', () => {
+    const loss = { answers: blank(), result: 'loss' as const, learned: '', risk: 0, reward: 0 }
+    const sessions = [{ ...session('2026-10-20', true, 'loss'), operations: [loss] }]
+    expect(resultCurve(sessions).map((point) => point.step)).toEqual([0])
+    expect(orchard(sessions)).toEqual({ apples: 0, people: 0, ugly: false })
   })
 
   it('perder sin manzanas pone el cubo feo y no baja de cero', () => {

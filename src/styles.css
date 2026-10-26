@@ -161,7 +161,7 @@ legend { padding: 0 6px; }
 .dossier { margin-top: 14px; }
 .window-label { position: absolute; top: 12px; left: 14px; z-index: 2; color: var(--bone); font-family: Anton, Impact, sans-serif; letter-spacing: 0.08em; pointer-events: none; text-shadow: 0 2px 0 #000; }
 .ratio { align-items: end; }
-.ratio label { width: 132px; }
+.ratio label { width: 160px; }
 
 @media (max-width: 900px) {
   .hero, .stats { grid-template-columns: 1fr; }
@@ -253,5 +253,7 @@ legend { padding: 0 6px; }
 .fund-legend strong { font-family: Anton, Impact, sans-serif; letter-spacing: 0.03em; }
 
 .fund-picks { display: grid; gap: 6px; }
-.fund-picks label { display: flex; align-items: center; gap: 8px; }
+.fund-picks label, .fund-row { display: flex; align-items: center; gap: 8px; }
 .fund-picks input { width: auto; }
+.fund-row label { flex: 1; }
+.fund-picks input.cash { width: 7.5rem; }
