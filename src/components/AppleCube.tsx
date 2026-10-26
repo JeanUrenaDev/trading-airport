@@ -50,6 +50,8 @@ export function FishTank({ levels }: { levels: TankLevel[] }) {
     let built = ''
     let frame = 0
     const swimmers: Swimmer[] = []
+    const fronds: Frond[] = []
+    const bubbles: Bubble[] = []
 
     function resize() {
       const width = node.clientWidth || 640
@@ -72,7 +74,9 @@ export function FishTank({ levels }: { levels: TankLevel[] }) {
       if (key !== built) {
         disposeContents(world)
         swimmers.length = 0
-        const frameFit = buildTanks(world, rows, swimmers)
+        fronds.length = 0
+        bubbles.length = 0
+        const frameFit = buildTanks(world, rows, swimmers, fronds, bubbles)
         live.current.halfWidth = frameFit.halfWidth
         live.current.lookY = frameFit.lookY
         built = key
@@ -88,6 +92,18 @@ export function FishTank({ levels }: { levels: TankLevel[] }) {
         const face = dx === 0 ? Math.sign(swimmer.mesh.scale.x) || 1 : Math.sign(dx)
         swimmer.mesh.scale.set(swimmer.base * face, swimmer.base, swimmer.base)
         swimmer.tail.rotation.z = Math.sin(t * 8 + swimmer.phase) * 0.4
+      }
+      for (const frond of fronds) {
+        frond.mesh.rotation.z = frond.base + Math.sin(seconds * frond.speed + frond.phase) * frond.amount
+      }
+      for (const bubble of bubbles) {
+        const cycle = (seconds * bubble.speed + bubble.phase) % 1
+        bubble.mesh.position.set(
+          bubble.x + Math.sin(seconds * 1.5 + bubble.phase * 5) * 0.03,
+          bubble.base + cycle * (bubble.top - bubble.base),
+          bubble.z,
+        )
+        bubble.mesh.scale.setScalar(bubble.size * (0.7 + cycle * 0.55))
       }
       const surfaces = world.userData.surfaces as THREE.Mesh[] | undefined
       for (const surface of surfaces ?? []) {
@@ -115,6 +131,25 @@ export function FishTank({ levels }: { levels: TankLevel[] }) {
   return <div ref={host} className="crate" role="img" aria-label={label} />
 }
 
+interface Frond {
+  mesh: THREE.Object3D
+  phase: number
+  speed: number
+  amount: number
+  base: number
+}
+
+interface Bubble {
+  mesh: THREE.Object3D
+  x: number
+  z: number
+  base: number
+  top: number
+  speed: number
+  phase: number
+  size: number
+}
+
 interface Swimmer {
   mesh: THREE.Group
   tail: THREE.Object3D
@@ -131,11 +166,17 @@ interface Swimmer {
   base: number
 }
 
-function buildTanks(root: THREE.Group, levels: TankLevel[], swimmers: Swimmer[]): { halfWidth: number; lookY: number } {
+function buildTanks(
+  root: THREE.Group,
+  levels: TankLevel[],
+  swimmers: Swimmer[],
+  fronds: Frond[],
+  bubbles: Bubble[],
+): { halfWidth: number; lookY: number } {
   const shown = levels.length > 0 ? levels : [{ name: '', carried: 0, goal: 3000 }]
   const big = shown.length === 1
-  const width = big ? 3.7 : 1.78
-  const gap = big ? 0 : 0.36
+  const width = big ? 3.7 : 1.62
+  const gap = big ? 0 : 0.96
   const step = width + gap
   const surfaces: THREE.Mesh[] = []
   root.userData.surfaces = surfaces
@@ -143,7 +184,7 @@ function buildTanks(root: THREE.Group, levels: TankLevel[], swimmers: Swimmer[])
     const tank = new THREE.Group()
     tank.position.x = (index - (shown.length - 1) / 2) * step
     root.add(tank)
-    buildOne(tank, level, index, big, levels.length > 0, swimmers, surfaces)
+    buildOne(tank, level, index, big, levels.length > 0, swimmers, surfaces, fronds, bubbles)
   })
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 40),
@@ -152,8 +193,8 @@ function buildTanks(root: THREE.Group, levels: TankLevel[], swimmers: Swimmer[])
   ground.rotation.x = -Math.PI / 2
   ground.receiveShadow = true
   root.add(ground)
-  const halfWidth = big ? 3.7 : (shown.length * step) / 2 + 0.15
-  return { halfWidth, lookY: big ? 1.15 : 0.95 }
+  const halfWidth = big ? 4.6 : ((shown.length - 1) * step) / 2 + width / 2 + 0.9
+  return { halfWidth, lookY: big ? 1.25 : 1.35 }
 }
 
 function buildOne(
@@ -164,9 +205,11 @@ function buildOne(
   withFish: boolean,
   swimmers: Swimmer[],
   surfaces: THREE.Mesh[],
+  fronds: Frond[],
+  bubbles: Bubble[],
 ) {
   const fill = crateFill(level.carried, level.goal)
-  const W = big ? 3.7 : 1.78
+  const W = big ? 3.7 : 1.62
   const D = big ? 2.15 : 1.2
   const H = big ? 2.65 : 2.45
   const t = big ? 0.055 : 0.04
@@ -240,24 +283,30 @@ function buildOne(
     surfaces.push(surface)
   }
 
-  const rulerW = big ? 1.05 : 0.62
+  const rulerH = waterRoom * 0.98
+  const rulerW = rulerH * (RULER_TEX_W / RULER_TEX_H)
   const ruler = new THREE.Mesh(
-    new THREE.PlaneGeometry(rulerW, waterRoom),
+    new THREE.PlaneGeometry(rulerW, rulerH),
     new THREE.MeshBasicMaterial({ map: rulerTexture(level.goal), transparent: true }),
   )
-  ruler.position.set(-W / 2 + rulerW * 0.62, waterBase + waterRoom / 2, D / 2 + 0.08)
+  ruler.position.set(-W / 2 - rulerW / 2 - 0.1, waterBase + waterRoom / 2, D / 2 + 0.08)
   ruler.renderOrder = 5
   root.add(ruler)
 
   if (level.name) {
     const plaque = new THREE.Mesh(
-      new THREE.PlaneGeometry(big ? 1.8 : 1.35, big ? 0.42 : 0.34),
+      new THREE.PlaneGeometry(big ? 2.35 : W * 1.02, big ? 0.56 : 0.5),
       new THREE.MeshBasicMaterial({ map: nameTexture(level.name, level.carried), transparent: true }),
     )
-    plaque.position.set(W * 0.12, t + H + (big ? 0.28 : 0.22), 0)
+    plaque.position.set(0, t + H + (big ? 0.34 : 0.28), 0)
     plaque.renderOrder = 5
     root.add(plaque)
   }
+
+  const depth = waterRoom * fill
+  const fitted = depth <= 0 ? 0.42 : Math.min(1, depth / (big ? 1.45 : 1.15))
+  const lifeScale = (big ? 1.25 : 1) * Math.max(0.42, fitted)
+  addReef(root, index, waterBase, lifeScale, fill > 0.08 ? waterBase + waterRoom * fill : 0, big ? 2.1 : 1, fronds, bubbles)
 
   if (!withFish) return
 
@@ -267,7 +316,7 @@ function buildOne(
   const midY = (swimLow + swimHigh) / 2
   const ampY = (swimHigh - swimLow) / 2 * 0.8
   const fish = makeFish(FISH_COLORS[index % FISH_COLORS.length])
-  const base = big ? 1.35 : 1.05
+  const base = big ? 1.25 : 0.9
   fish.mesh.scale.setScalar(base)
   fish.mesh.traverse((obj) => {
     obj.renderOrder = 4
@@ -278,10 +327,10 @@ function buildOne(
   swimmers.push({
     mesh: fish.mesh,
     tail: fish.tail,
-    ox: big ? 0.15 : 0.22,
+    ox: 0,
     oy: midY,
     oz: 0.12,
-    ax: big ? 0.55 : 0.2,
+    ax: big ? 0.85 : 0.28,
     ay: ampY,
     az: 0,
     sx: 0.55 + (index % 3) * 0.08,
@@ -293,61 +342,75 @@ function buildOne(
 }
 
 
+function paper(ctx: CanvasRenderingContext2D, width: number, height: number, radius: number) {
+  const inset = 18
+  ctx.clearRect(0, 0, width, height)
+  ctx.beginPath()
+  ctx.roundRect(inset, inset, width - inset * 2, height - inset * 2, radius)
+  ctx.fillStyle = '#f4ecdf'
+  ctx.fill()
+  ctx.lineWidth = 10
+  ctx.strokeStyle = '#12100e'
+  ctx.stroke()
+}
+
 function nameTexture(name: string, carried: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 160
+  canvas.width = 980
+  canvas.height = 320
   const ctx = canvas.getContext('2d')
   if (ctx) {
-    ctx.fillStyle = '#f6efe2'
-    ctx.fillRect(0, 0, 512, 160)
-    ctx.strokeStyle = '#6e4e2c'
-    ctx.lineWidth = 10
-    ctx.strokeRect(6, 6, 500, 148)
-    ctx.fillStyle = '#2a2118'
+    paper(ctx, 980, 320, 40)
+    ctx.fillStyle = '#12100e'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = '700 58px Impact, Arial Black, sans-serif'
-    const title = name.length > 16 ? name.slice(0, 15) + '…' : name
-    ctx.fillText(title, 256, 58)
-    ctx.font = '700 48px Impact, Arial Black, sans-serif'
+    ctx.font = '400 108px Anton, Impact, sans-serif'
+    const title = name.length > 18 ? name.slice(0, 17) + '…' : name
+    ctx.fillText(title, 490, 118)
+    ctx.font = '700 92px Barlow, "Segoe UI", sans-serif'
     const sign = carried < 0 ? '-' : ''
-    ctx.fillText(sign + '$' + Math.abs(Math.round(carried)).toLocaleString('en-US'), 256, 114)
+    ctx.fillText(sign + '$' + Math.abs(Math.round(carried)).toLocaleString('en-US'), 490, 228)
   }
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.colorSpace = THREE.SRGBColorSpace
-  return tex
+  return sharpTexture(canvas)
 }
+
+const RULER_TEX_W = 560
+const RULER_TEX_H = 1500
 
 function rulerTexture(goal: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
-  canvas.width = 280
-  canvas.height = 720
+  canvas.width = RULER_TEX_W
+  canvas.height = RULER_TEX_H
   const ctx = canvas.getContext('2d')
   const top = goal > 0 ? goal : 3000
   if (ctx) {
-    ctx.fillStyle = '#f6efe2'
-    ctx.fillRect(0, 0, 280, 720)
-    ctx.strokeStyle = '#6e4e2c'
-    ctx.lineWidth = 10
-    ctx.strokeRect(8, 8, 264, 704)
-    ctx.fillStyle = '#2a2118'
-    ctx.font = '700 64px Impact, Arial Black, sans-serif'
-    ctx.textAlign = 'right'
+    paper(ctx, RULER_TEX_W, RULER_TEX_H, 32)
+    ctx.fillStyle = '#12100e'
+    ctx.strokeStyle = '#12100e'
+    ctx.font = '700 104px Barlow, "Segoe UI", sans-serif'
+    ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.lineWidth = 8
     for (let step = 0; step <= 4; step += 1) {
-      const y = 680 - (step / 4) * 640
+      const y = 1340 - (step / 4) * 1180
       const value = Math.round((top / 4) * step)
+      ctx.fillText(value.toLocaleString('en-US'), 250, y)
       ctx.beginPath()
-      ctx.moveTo(168, y)
-      ctx.lineTo(250, y)
+      ctx.moveTo(430, y)
+      ctx.lineTo(510, y)
       ctx.stroke()
-      ctx.fillText(value.toLocaleString('en-US'), 158, y)
     }
   }
+  return sharpTexture(canvas)
+}
+
+function sharpTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
+  tex.anisotropy = 16
+  tex.magFilter = THREE.LinearFilter
+  tex.minFilter = THREE.LinearFilter
+  tex.generateMipmaps = false
   return tex
 }
 
@@ -399,6 +462,259 @@ function dorsalShape(): THREE.Shape {
   shape.moveTo(0.02, 0.1)
   shape.lineTo(0.08, 0.2)
   shape.lineTo(0.16, 0.08)
+  shape.closePath()
+  return shape
+}
+
+const CORALS = [0xff4f78, 0xff7a3c, 0xd946ef, 0xff5d8f, 0xffb020]
+const WEEDS = [0x1f9d55, 0x147a3f, 0x2fbf71, 0x0e8a52, 0x67b83a]
+const ACCENTS = [0xc084fc, 0x38bdf8, 0xfb7185, 0xf59e0b, 0xe879f9]
+const LIFE_EXTRUDE = { depth: 0.055, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.008, bevelSegments: 1 }
+
+function addReef(
+  root: THREE.Group,
+  index: number,
+  floor: number,
+  scale: number,
+  surface: number,
+  spread: number,
+  fronds: Frond[],
+  bubbles: Bubble[],
+) {
+  const reef = new THREE.Group()
+  reef.position.y = floor
+  reef.scale.setScalar(scale * 1.6)
+  root.add(reef)
+
+  const rock = cutout(rockShape(), 0x9a7348)
+  rock.position.set(-0.34, 0, -0.02)
+  reef.add(rock)
+  const rock2 = cutout(rockShape(), 0xb08960)
+  rock2.position.set(0.38, 0, -0.04)
+  rock2.scale.set(0.8, 0.7, 1)
+  reef.add(rock2)
+
+  const coralColor = CORALS[index % CORALS.length]
+  const coral = index % 2 === 0 ? cutout(coralShape(), coralColor) : cutout(moundShape(), coralColor)
+  coral.position.set(-0.42, 0, 0.04)
+  reef.add(coral)
+  fronds.push({ mesh: coral, phase: index, speed: 0.55, amount: 0.035, base: 0 })
+
+  const weed = seaweed(WEEDS[index % WEEDS.length], index * 0.7, fronds)
+  weed.position.set(0.4, 0, 0)
+  reef.add(weed)
+
+  const accent = ACCENTS[index % ACCENTS.length]
+  const middle = index % 3 === 0 ? anemone(accent, index, fronds) : index % 3 === 1 ? seaFan(accent, index, fronds) : sponge(accent)
+  middle.position.set(index % 2 === 0 ? 0.02 : -0.08, 0, 0.08)
+  reef.add(middle)
+
+  const star = cutout(starShape(), 0xff7a2f)
+  star.position.set(0.16, 0.015, 0.16)
+  star.scale.setScalar(0.9)
+  reef.add(star)
+
+  const clam = cutout(clamShape(), 0xf3e2c4)
+  clam.position.set(-0.12, 0.01, 0.14)
+  reef.add(clam)
+
+  reef.traverse((obj) => {
+    obj.renderOrder = 4
+  })
+
+  if (surface <= floor + 0.12) return
+  const bubbleMat = new THREE.MeshStandardMaterial({
+    color: 0xe7f7ff,
+    transparent: true,
+    opacity: 0.8,
+    roughness: 0.12,
+    depthWrite: false,
+  })
+  const spots = [-0.22, 0.08, 0.3]
+  spots.forEach((spotX, spot) => {
+    const x = spotX * spread
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), bubbleMat)
+    mesh.renderOrder = 4
+    mesh.position.set(x, floor + 0.08, 0.2)
+    root.add(mesh)
+    bubbles.push({
+      mesh,
+      x,
+      z: 0.2,
+      base: floor + 0.08,
+      top: surface - 0.04,
+      speed: 0.16 + spot * 0.05,
+      phase: index * 0.37 + spot * 0.31,
+      size: 0.75 + (spot % 2) * 0.35,
+    })
+  })
+}
+
+function cutout(shape: THREE.Shape, color: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(shape, LIFE_EXTRUDE),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.48, side: THREE.DoubleSide }),
+  )
+  mesh.position.z = -0.028
+  mesh.castShadow = true
+  return mesh
+}
+
+function seaweed(color: number, phase: number, fronds: Frond[]): THREE.Group {
+  const group = new THREE.Group()
+  const leans = [-0.1, 0.02, 0.12]
+  leans.forEach((lean, i) => {
+    const blade = cutout(bladeShape(), i === 1 ? color : shade(color, i === 0 ? 0.75 : 1.15))
+    blade.position.x = (i - 1) * 0.07
+    blade.scale.y = 0.82 + i * 0.14
+    group.add(blade)
+    fronds.push({ mesh: blade, phase: phase + i * 0.8, speed: 1.15 + i * 0.2, amount: 0.07, base: lean })
+  })
+  return group
+}
+
+function anemone(color: number, index: number, fronds: Frond[]): THREE.Group {
+  const group = new THREE.Group()
+  const foot = cutout(moundShape(), shade(color, 0.7))
+  foot.scale.set(0.55, 0.4, 1)
+  group.add(foot)
+  for (let i = 0; i < 5; i += 1) {
+    const arm = cutout(tentacleShape(), i % 2 === 0 ? color : shade(color, 1.2))
+    arm.position.x = (i - 2) * 0.045
+    group.add(arm)
+    fronds.push({
+      mesh: arm,
+      phase: index + i,
+      speed: 1.4,
+      amount: 0.12,
+      base: (i - 2) * 0.16,
+    })
+  }
+  return group
+}
+
+function seaFan(color: number, index: number, fronds: Frond[]): THREE.Group {
+  const group = new THREE.Group()
+  const fan = cutout(fanShape(), color)
+  group.add(fan)
+  fronds.push({ mesh: fan, phase: index * 1.2, speed: 0.7, amount: 0.05, base: -0.04 })
+  return group
+}
+
+function sponge(color: number): THREE.Group {
+  const group = new THREE.Group()
+  const tube = cutout(spongeShape(), color)
+  const lip = cutout(spongeShape(), shade(color, 1.25))
+  lip.scale.set(0.72, 0.72, 1)
+  lip.position.x = 0.1
+  group.add(tube, lip)
+  return group
+}
+
+function shade(color: number, mix: number): number {
+  const src = new THREE.Color(color)
+  src.offsetHSL(0, 0, (mix - 1) * 0.35)
+  return src.getHex()
+}
+
+function rockShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.2, 0)
+  shape.bezierCurveTo(-0.22, 0.1, -0.08, 0.16, 0.02, 0.11)
+  shape.bezierCurveTo(0.12, 0.17, 0.24, 0.09, 0.2, 0)
+  shape.closePath()
+  return shape
+}
+
+function coralShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.07, 0)
+  shape.lineTo(-0.1, 0.16)
+  shape.lineTo(-0.2, 0.36)
+  shape.lineTo(-0.11, 0.39)
+  shape.lineTo(-0.05, 0.2)
+  shape.lineTo(-0.01, 0.46)
+  shape.lineTo(0.08, 0.48)
+  shape.lineTo(0.05, 0.2)
+  shape.lineTo(0.2, 0.34)
+  shape.lineTo(0.22, 0.24)
+  shape.lineTo(0.09, 0.14)
+  shape.lineTo(0.08, 0)
+  shape.closePath()
+  return shape
+}
+
+function moundShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.16, 0)
+  shape.bezierCurveTo(-0.18, 0.16, -0.08, 0.3, 0, 0.28)
+  shape.bezierCurveTo(0.12, 0.32, 0.2, 0.16, 0.16, 0)
+  shape.closePath()
+  return shape
+}
+
+function bladeShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(0, 0)
+  shape.bezierCurveTo(0.05, 0.16, -0.04, 0.34, 0.02, 0.58)
+  shape.bezierCurveTo(0.06, 0.34, 0.09, 0.16, 0.045, 0)
+  shape.closePath()
+  return shape
+}
+
+function fanShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(0, 0)
+  shape.lineTo(-0.015, 0.12)
+  shape.quadraticCurveTo(-0.2, 0.2, -0.16, 0.4)
+  shape.quadraticCurveTo(0, 0.5, 0.16, 0.4)
+  shape.quadraticCurveTo(0.2, 0.2, 0.015, 0.12)
+  shape.closePath()
+  return shape
+}
+
+function tentacleShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(0, 0.05)
+  shape.bezierCurveTo(0.03, 0.12, 0.045, 0.18, 0.01, 0.28)
+  shape.bezierCurveTo(0.04, 0.18, 0.03, 0.1, 0.028, 0.05)
+  shape.closePath()
+  return shape
+}
+
+function spongeShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.06, 0)
+  shape.lineTo(-0.07, 0.22)
+  shape.lineTo(-0.11, 0.32)
+  shape.lineTo(0.11, 0.32)
+  shape.lineTo(0.07, 0.22)
+  shape.lineTo(0.06, 0)
+  shape.closePath()
+  return shape
+}
+
+function starShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  const spikes = 5
+  for (let i = 0; i < spikes * 2; i += 1) {
+    const radius = i % 2 === 0 ? 0.09 : 0.04
+    const angle = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2
+    const x = Math.cos(angle) * radius
+    const y = Math.sin(angle) * radius + 0.09
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return shape
+}
+
+function clamShape(): THREE.Shape {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.08, 0.01)
+  shape.quadraticCurveTo(-0.09, 0.08, 0, 0.09)
+  shape.quadraticCurveTo(0.09, 0.08, 0.08, 0.01)
+  shape.quadraticCurveTo(0, 0.035, -0.08, 0.01)
   shape.closePath()
   return shape
 }
