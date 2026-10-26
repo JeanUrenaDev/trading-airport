@@ -22,13 +22,16 @@ type TradeSession = BalanceMark & { operations?: TakenOp[] }
 export function AccountsPanel({
   book,
   sessions,
+  locked = false,
   onSave,
 }: {
   book: AccountBook
   sessions: TradeSession[]
+  locked?: boolean
   onSave: (book: AccountBook) => void
 }) {
   useEffect(() => {
+    if (locked) return
     const accounts = book.accounts.map((account) => {
       const opening = openingBalance(account)
       if (opening == null || opening === account.balance) return account
@@ -37,7 +40,7 @@ export function AccountsPanel({
     if (accounts.some((account, index) => account.balance !== book.accounts[index]?.balance)) {
       onSave({ ...book, updated: new Date().toISOString(), accounts })
     }
-  }, [book, onSave])
+  }, [book, onSave, locked])
   const known = typesOf(book)
   const opening = known.find((item) => item.firm === "topstep" && item.start === 50000) ?? known[0]
   const [firm, setFirm] = useState<Firm>(opening.firm)
@@ -167,16 +170,18 @@ export function AccountsPanel({
               <Meter label={"DD " + money(state.drawdown) + " de " + money(account.maxDd)} value={account.maxDd > 0 ? state.drawdown / account.maxDd : 0} tone={state.room < account.risk ? "bad" : "good"} />
               <p className="fine">{state.busted ? "El límite de pérdida ya se tocó." : "Quedan " + money(state.room) + " antes del límite" + (state.locked ? ". El límite ya se trabó." : ".")}</p>
               <Meter label={"Objetivo " + money(Math.max(0, state.pnl)) + " de " + money(account.objective)} value={Math.max(0, state.progress)} tone="good" />
-              <div className="row">
-                <button type="button" onClick={() => edit(account)}>Editar</button>
-                <button type="button" onClick={() => onSave({ updated: new Date().toISOString(), accounts: book.accounts.filter((item) => item.id !== account.id).map((item) => item.replicaOf === account.id ? { ...item, replicaOf: undefined } : item), types: typesOf(book) })}>Quitar</button>
-              </div>
+              {!locked && (
+                <div className="row">
+                  <button type="button" onClick={() => edit(account)}>Editar</button>
+                  <button type="button" onClick={() => onSave({ updated: new Date().toISOString(), accounts: book.accounts.filter((item) => item.id !== account.id).map((item) => item.replicaOf === account.id ? { ...item, replicaOf: undefined } : item), types: typesOf(book) })}>Quitar</button>
+                </div>
+              )}
             </article>
           )
         })}
       </div>
 
-      <form className="fund-form" onSubmit={saveType}>
+      {!locked && <form className="fund-form" onSubmit={saveType}>
         <h3>Tipo {firmName(firm)} {selected.label}</h3>
         <div className="choice firm-pick">
           <button type="button" className={firm === "topstep" ? "on" : ""} onClick={() => showType("topstep", PRESETS.some((item) => item.firm === "topstep" && item.start === size) ? size : 50000)}><FirmBadge firm="topstep" /></button>
@@ -195,9 +200,9 @@ export function AccountsPanel({
           <label>Riesgo del día<input type="number" min="1" step="1" value={risk} onChange={(event) => setRisk(event.target.value)} /></label>
         </div>
         <button type="submit">Guardar tipo</button>
-      </form>
+      </form>}
 
-      <form className="fund-form" onSubmit={saveAccount}>
+      {!locked && <form className="fund-form" onSubmit={saveAccount}>
         <h3>{editing ? "Editar cuenta" : "Nueva cuenta " + firmName(firm) + " " + selected.label}</h3>
         <p className="fine">Solo cambia el nombre y el balance. El resto sale del tipo.</p>
         <div className="fund-fields">
@@ -229,7 +234,7 @@ export function AccountsPanel({
           <button type="submit" className="solid">{editing ? "Guardar cambios" : "Agregar cuenta"}</button>
           {editing ? <button type="button" onClick={resetAccount}>Cancelar</button> : null}
         </div>
-      </form>
+      </form>}
     </section>
   )
 }

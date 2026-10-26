@@ -47,6 +47,81 @@ export async function signOut(): Promise<void> {
   await client().auth.signOut()
 }
 
+export const GUEST_EMAIL = 'jeanliral@gmail.com'
+
+export function journalFromGuest(raw: unknown): { rules: RuleDef[]; sessions: SessionRecord[] } {
+  const bag = raw && typeof raw === 'object' ? (raw as { rules?: unknown; sessions?: unknown }) : {}
+  const rules = (Array.isArray(bag.rules) ? bag.rules : []).flatMap(ruleFromGuest)
+  const sessions = (Array.isArray(bag.sessions) ? bag.sessions : []).flatMap(sessionFromGuest)
+  rules.sort((a, b) => a.position - b.position)
+  sessions.sort((a, b) => a.date.localeCompare(b.date))
+  return { rules, sessions }
+}
+
+function ruleFromGuest(raw: unknown): RuleDef[] {
+  if (!raw || typeof raw !== 'object') return []
+  const row = raw as { id?: unknown; position?: unknown; text?: unknown; kind?: unknown; custom?: unknown }
+  if (typeof row.id !== 'string' || typeof row.text !== 'string') return []
+  if (row.kind !== 'yesno' && row.kind !== 'tri') return []
+  const position = Number(row.position)
+  if (!Number.isInteger(position)) return []
+  return [{ id: row.id, position, text: row.text, kind: row.kind, custom: row.custom === true }]
+}
+
+function sessionFromGuest(raw: unknown): SessionRecord[] {
+  if (!raw || typeof raw !== 'object') return []
+  const row = raw as SessionRow
+  if (typeof row.session_date !== 'string' || (row.status !== 'rest' && row.status !== 'completed')) return []
+  return [{
+    date: row.session_date,
+    status: row.status,
+    result: row.result,
+    learned: row.learned ?? '',
+    note: row.note ?? '',
+    ...unpackAnswers(row.answers),
+    disciplined: row.disciplined === true,
+  }]
+}
+
+function guestFailure(message: string): string {
+  if (/guest_journal|schema cache|could not find the function/i.test(message)) {
+    return 'El modo invitado todavía no está en la base.'
+  }
+  return message
+}
+
+async function loadGuestJournal(): Promise<{ rules: RuleDef[]; sessions: SessionRecord[] }> {
+  const { data, error } = await client().rpc('guest_journal')
+  if (error) throw new Error(guestFailure(error.message))
+  return journalFromGuest(data)
+}
+
+function guestBlocked(): Promise<void> {
+  return Promise.reject(new Error('El invitado solo mira. Entra con tu cuenta para guardar.'))
+}
+
+export function guestStore(): PetStore {
+  let flight: Promise<{ rules: RuleDef[]; sessions: SessionRecord[] }> | null = null
+  function load() {
+    if (!flight) {
+      flight = loadGuestJournal().catch((error: unknown) => {
+        flight = null
+        throw error
+      })
+    }
+    return flight
+  }
+  return {
+    loadRules: () => load().then((journal) => journal.rules),
+    loadSessions: () => load().then((journal) => journal.sessions),
+    saveSession: guestBlocked,
+    deleteSession: guestBlocked,
+    addRule: guestBlocked,
+    renameRule: guestBlocked,
+    removeRule: guestBlocked,
+  }
+}
+
 interface RuleRow {
   id: string
   position: number

@@ -123,3 +123,65 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Invitado: solo lee el año de jeanliral@gmail.com. No escribe.
+
+create or replace function public.guest_owner()
+returns uuid
+language sql
+stable
+security definer
+set search_path = public, auth
+as $$
+  select id from auth.users where lower(email) = 'jeanliral@gmail.com' limit 1
+$$;
+
+revoke all on function public.guest_owner() from public, anon, authenticated;
+
+create or replace function public.guest_journal()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  owner uuid;
+begin
+  owner := public.guest_owner();
+  if owner is null then
+    return jsonb_build_object('rules', '[]'::jsonb, 'sessions', '[]'::jsonb);
+  end if;
+  return jsonb_build_object(
+    'rules', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', r.id,
+        'position', r.position,
+        'text', r.text,
+        'kind', r.kind,
+        'custom', r.custom
+      ) order by r.position)
+      from public.rules r
+      where r.user_id = owner
+    ), '[]'::jsonb),
+    'sessions', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'session_date', to_char(s.session_date, 'YYYY-MM-DD'),
+        'status', s.status,
+        'result', s.result,
+        'learned', s.learned,
+        'note', s.note,
+        'answers', s.answers,
+        'disciplined', s.disciplined
+      ) order by s.session_date)
+      from public.sessions s
+      where s.user_id = owner
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+revoke all on function public.guest_journal() from public;
+grant execute on function public.guest_journal() to anon, authenticated;
+
+notify pgrst, 'reload schema';

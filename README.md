@@ -27,4 +27,6 @@ VITE_SUPABASE_ANON_KEY=tu-clave-anon
 
 Las tablas tienen RLS: cada usuario solo ve sus filas. `recompute_unlocks` vuelve a numerar los hitos desde las sesiones guardadas, así que recargar no desbloquea dos veces el mismo día. Si el registro pide confirmar el correo, el mensaje aparece en la pantalla de entrada.
 
+En la entrada, **Ver como invitado** abre el año de jeanliral@gmail.com en solo lectura: días, reglas y cuentas. `guest_journal` vive al final de `supabase/schema.sql`. Hay que ejecutarlo en el editor SQL para que el invitado pueda leer. No escribe.
+
 La pregunta «¿Operé pasivo en un nivel?» acepta Sí, No o No aplicaba. No aplicaba no resta. Un día marcado como «No operé» no rompe la racha y no da hito. Después del día 365 la propiedad sigue creciendo.

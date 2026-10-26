@@ -37,7 +37,7 @@ import { AccountsPanel } from './Accounts'
 import { Airport } from './Airport'
 import { AppleCube } from './AppleCube'
 
-export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut?: () => void; banner?: string }) {
+export function Board({ store, onSignOut, banner, readOnly = false }: { store: PetStore; onSignOut?: () => void; banner?: string; readOnly?: boolean }) {
   const [rules, setRules] = useState<RuleDef[]>([])
   const [sessions, setSessions] = useState<SessionRecord[]>([])
   const [error, setError] = useState('')
@@ -53,8 +53,8 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
 
   async function reload() {
     const [nextRules, nextSessions] = await Promise.all([store.loadRules(), store.loadSessions()])
-    const nextBook = pickBook(nextSessions, readBook())
-    writeBook(nextBook)
+    const nextBook = pickBook(nextSessions, readOnly ? { updated: '', accounts: [] } : readBook())
+    if (!readOnly) writeBook(nextBook)
     setRules(nextRules)
     setSessions(nextSessions)
     setBook(nextBook)
@@ -69,7 +69,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
     return () => {
       alive = false
     }
-  }, [store])
+  }, [store, readOnly])
 
   const ordered = useMemo(() => orderedDisciplined(sessions), [sessions])
   const count = ordered.length
@@ -78,6 +78,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
   const nextPiece = unlockName(count + 1)
 
   async function commitBook(next: AccountBook) {
+    if (readOnly) return
     const stamped = { ...next, updated: next.updated || new Date().toISOString() }
     writeBook(stamped)
     setBook(stamped)
@@ -177,6 +178,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
       {tab === 'reglas' && (
         <Rules
           rules={rules}
+          locked={readOnly}
           onAdd={async (text) => {
             await store.addRule(text, rules.length + 1)
             setRules(await store.loadRules())
@@ -192,7 +194,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
         />
       )}
 
-      {tab === 'cuentas' && <AccountsPanel book={book} sessions={sessions} onSave={(next) => void commitBook(next)} />}
+      {tab === 'cuentas' && <AccountsPanel book={book} sessions={sessions} locked={readOnly} onSave={(next) => void commitBook(next)} />}
 
       {selected && (
         <DaySheet
@@ -203,6 +205,7 @@ export function Board({ store, onSignOut, banner }: { store: PetStore; onSignOut
           existing={sessions.find((session) => session.date === selected)}
           piece={pieceForDate(selected, ordered)}
           history={sessions}
+          locked={readOnly}
           onClose={() => setSelected(null)}
           onSave={async (session) => {
             await persist({ ...session, book })
@@ -323,7 +326,7 @@ function initialOps(existing: SessionRecord | undefined, rules: RuleDef[]): Trad
 }
 
 function DaySheet({
-  dateKey, rules, accounts, existing, piece, history, onClose, onSave,
+  dateKey, rules, accounts, existing, piece, history, locked = false, onClose, onSave,
 }: {
   dateKey: string
   rules: RuleDef[]
@@ -331,6 +334,7 @@ function DaySheet({
   existing?: SessionRecord
   piece: number
   history: SessionRecord[]
+  locked?: boolean
   onClose: () => void
   onSave: (session: SessionRecord) => Promise<void>
 }) {
@@ -378,6 +382,7 @@ function DaySheet({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault()
+          if (locked) return
           if (mode === 'rest') {
             void save({ date: dateKey, status: 'rest', result: null, learned: '', note, answers: [], operations: [], disciplined: false })
             return
@@ -415,8 +420,10 @@ function DaySheet({
         </div>
         {future ? (
           <p>Este día todavía no llega. Los registros viejos siguen guardados.</p>
+        ) : locked && !existing ? (
+          <p>Este día no tiene registro.</p>
         ) : (
-          <>
+          <div className={locked ? 'locked-view' : undefined}>
             <div className="choice">
               <button type="button" className={mode === 'trade' ? 'on' : ''} onClick={() => setMode('trade')}>Operé</button>
               <button type="button" className={mode === 'rest' ? 'on' : ''} onClick={() => setMode('rest')}>No operé</button>
@@ -425,18 +432,18 @@ function DaySheet({
               <p>Día libre. No suma hito y no cuenta como fallo.</p>
             ) : (
               <>
-                <div className="choice">
+                <div className="choice op-tabs">
                   {ops.map((op, index) => (
                     <button key={index} type="button" data-result={op.result ?? ""} className={index === active ? 'on' : ''} onClick={() => setActive(index)}>
                       Operación {index + 1}
                     </button>
                   ))}
-                  {ops.length < 3 && (
+                  {!locked && ops.length < 3 && (
                     <button type="button" onClick={() => { setOps((list) => [...list, blankTrade(rules)]); setActive(ops.length) }}>
                       Otra
                     </button>
                   )}
-                  {ops.length > 1 && (
+                  {!locked && ops.length > 1 && (
                     <button type="button" onClick={() => { setOps((list) => list.filter((_, index) => index !== active)); setActive(0) }}>
                       Quitar
                     </button>
@@ -522,7 +529,7 @@ function DaySheet({
                     }}
                   >{copied ? "Copiado" : "Copiar análisis"}</button>
                 </div>
-                {pastAnalyses.length > 0 && (
+                {!locked && pastAnalyses.length > 0 && (
                   <label>
                     Traer un análisis anterior
                     <select
@@ -618,8 +625,10 @@ function DaySheet({
               </label>
             )}
             {error ? <p className="alert" role="alert">{error}</p> : null}
-            <button type="submit" className="solid" disabled={busy}>{busy ? 'Guardando…' : 'Guardar día'}</button>
-          </>
+            {locked ? <p className="fine">Solo lectura. Este día es de Jean.</p> : (
+              <button type="submit" className="solid" disabled={busy}>{busy ? 'Guardando…' : 'Guardar día'}</button>
+            )}
+          </div>
         )}
       </form>
     </div>
@@ -745,9 +754,10 @@ function Numbers({
 }
 
 function Rules({
-  rules, onAdd, onRename, onRemove,
+  rules, locked = false, onAdd, onRename, onRemove,
 }: {
   rules: RuleDef[]
+  locked?: boolean
   onAdd: (text: string) => Promise<void>
   onRename: (id: string, text: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
@@ -759,8 +769,8 @@ function Rules({
   return (
     <section className="panel">
       <h2>Reglas</h2>
-      <p className="fine">Las siete primeras se quedan. Puedes cambiar el texto. La de operar pasivo acepta No aplicaba.</p>
-      <div className="row add">
+      <p className="fine">{locked ? 'Las reglas de Jean. Solo lectura.' : 'Las siete primeras se quedan. Puedes cambiar el texto. La de operar pasivo acepta No aplicaba.'}</p>
+      {!locked && <div className="row add">
         <input value={text} maxLength={140} placeholder="Regla nueva" onChange={(event) => setText(event.target.value)} />
         <button
           type="button"
@@ -778,7 +788,7 @@ function Rules({
         >
           Añadir
         </button>
-      </div>
+      </div>}
       {error ? <p className="alert">{error}</p> : null}
       <ul className="rule-list">
         {rules.map((rule, index) => (
@@ -792,8 +802,8 @@ function Rules({
             ) : (
               <>
                 <p>{rule.text}{rule.kind === 'tri' ? ' · sí / no / no aplicaba' : ''}</p>
-                <button type="button" onClick={() => setEdit({ id: rule.id, text: rule.text })}>Editar</button>
-                {rule.custom ? <button type="button" onClick={() => void onRemove(rule.id)}>Quitar</button> : null}
+                {!locked && <button type="button" onClick={() => setEdit({ id: rule.id, text: rule.text })}>Editar</button>}
+                {!locked && rule.custom ? <button type="button" onClick={() => void onRemove(rule.id)}>Quitar</button> : null}
               </>
             )}
           </li>
